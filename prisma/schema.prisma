@@ -1,0 +1,92 @@
+// JobRadar — Prisma Schema
+// Default: SQLite (local dev). For Vercel, change provider to "postgresql"
+// and update DATABASE_URL in .env
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  rawText         String
+  skills          String   // JSON: string[]
+  titles          String   // JSON: string[]
+  experienceYears Int      @default(0)
+  education       String   // JSON: { degree, field, school }[]
+  location        String?
+  desiredRole     String?
+  summary         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Job {
+  id                String    @id @default(cuid())
+  externalId        String    @unique
+  title             String
+  company           String
+  location          String?
+  salaryMin         Float?
+  salaryMax         Float?
+  salaryCurrency    String?   @default("USD")
+  jobType           String?   // full-time, part-time, contract, remote
+  seniority         String?   // junior, mid, senior, lead, staff
+  description       String
+  requirements      String?
+  responsibilities  String?
+  applicationUrl    String
+  source            String    // adzuna, linkedin, indeed, manual
+  postedDate        DateTime?
+  closingDate       DateTime?
+  matchScore        Int?      @default(0)
+  matchReasons      String?   // JSON: string[]
+  whyMatch          String?   // Detailed "why you match" text
+  hiringManager     String?
+  hiringManagerUrl  String?
+  companySize       String?
+  companyFunding    String?
+  companyIndustry   String?
+  companyRating     Float?
+  duplicateOf       String?
+  duplicateSources  String?   // JSON: string[]
+  saved             Boolean   @default(false)
+  scored            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  pipelineItem      PipelineItem?
+}
+
+model PipelineItem {
+  id          String   @id @default(cuid())
+  jobId       String   @unique
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stage       String   @default("saved")
+  // Stages: saved | applied | phone_screen | interview | offer | rejected
+  notes       String?
+  deadline    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // new_match, high_score, deadline_warning
+  title     String
+  message   String
+  jobId     String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  @@index([key])
+}
