@@ -1,118 +1,112 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { safeJsonParse } from "@/lib/utils";
-import type { Job } from "@/types";
+import { requireUser, AuthError } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    const { supabase, user } = await requireUser();
+
     const [
-      totalJobs,
-      scoredJobs,
-      pipelineItems,
-      notifications,
-      topMatchJobs,
-      lastFetchSetting,
-      lastVisitSetting,
+      { count: totalJobs },
+      avgResult,
+      { data: pipelineStages },
+      { count: unreadNotifications },
+      { data: topMatches },
+      { data: lastFetchSetting },
+      { data: lastVisitSetting },
     ] = await Promise.all([
-      prisma.job.count(),
-      prisma.job.aggregate({ _avg: { matchScore: true } }),
-      prisma.pipelineItem.groupBy({ by: ["stage"], _count: { stage: true } }),
-      prisma.notification.count({ where: { read: false } }),
-      prisma.job.findMany({
-        where: { matchScore: { gt: 0 } },
-        orderBy: { matchScore: "desc" },
-        take: 3,
-        include: { pipelineItem: true },
-      }),
-      prisma.setting.findUnique({ where: { key: "lastJobFetch" } }),
-      prisma.setting.findUnique({ where: { key: "lastVisit" } }),
+      supabase.from("jobs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("jobs").select("match_score").eq("user_id", user.id).gt("match_score", 0),
+      supabase.from("pipeline_items").select("stage").eq("user_id", user.id),
+      supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("read", false),
+      supabase.from("jobs").select("*").eq("user_id", user.id).gt("match_score", 0).order("match_score", { ascending: false }).limit(3),
+      supabase.from("settings").select("value").eq("user_id", user.id).eq("key", "lastJobFetch").maybeSingle(),
+      supabase.from("settings").select("value").eq("user_id", user.id).eq("key", "lastVisit").maybeSingle(),
     ]);
 
-    // Count new jobs since last visit
-    const lastVisitDate = lastVisitSetting ? new Date(lastVisitSetting.value) : null;
-    const newSinceLastVisit = lastVisitDate
-      ? await prisma.job.count({ where: { createdAt: { gt: lastVisitDate } } })
+    // Calc avg score
+    const scoreRows = avgResult.data ?? [];
+    const avgMatchScore = scoreRows.length > 0
+      ? Math.round(scoreRows.reduce((sum, j) => sum + (j.match_score ?? 0), 0) / scoreRows.length)
       : 0;
 
-    // Update last visit
-    await prisma.setting.upsert({
-      where: { key: "lastVisit" },
-      create: { key: "lastVisit", value: new Date().toISOString() },
-      update: { value: new Date().toISOString() },
-    });
-
+    // Stage counts
     const stageMap: Record<string, number> = {};
-    for (const item of pipelineItems) {
-      stageMap[item.stage] = item._count.stage;
+    for (const item of pipelineStages ?? []) {
+      stageMap[item.stage] = (stageMap[item.stage] ?? 0) + 1;
     }
 
-    // Check API status
-    const apiStatus = {
-      anthropic: process.env.ANTHROPIC_API_KEY ? "ok" : "unknown",
-      adzuna: process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY ? "ok" : "unknown",
-      apify: process.env.APIFY_API_TOKEN ? "ok" : "unknown",
-      resend: process.env.RESEND_API_KEY ? "ok" : "unknown",
-      messages: [] as Array<{ service: string; message: string; severity: string }>,
-    };
+    // New since last visit
+    const lastVisitDate = lastVisitSetting?.value ? new Date(lastVisitSetting.value) : null;
+    let newSinceLastVisit = 0;
+    if (lastVisitDate) {
+      const { count } = await supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gt("created_at", lastVisitDate.toISOString());
+      newSinceLastVisit = count ?? 0;
+    }
 
+    // Update last visit
+    await supabase.from("settings").upsert(
+      { user_id: user.id, key: "lastVisit", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    );
+
+    // Check API status — these are env-level checks
+    const messages: Array<{ service: string; message: string; severity: string }> = [];
     if (!process.env.ANTHROPIC_API_KEY) {
-      apiStatus.messages.push({
-        service: "Anthropic",
-        message: "⚠️ AI features unavailable — your Anthropic API key is invalid or out of credits. Visit console.anthropic.com to top up.",
-        severity: "warning",
-      });
+      // Check if user has their own key
+      const { data: aiSettings } = await supabase
+        .from("ai_settings")
+        .select("anthropic_api_key_encrypted")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!aiSettings?.anthropic_api_key_encrypted) {
+        messages.push({
+          service: "Anthropic",
+          message: "⚠️ AI features unavailable — add an Anthropic API key in Settings → AI to enable scoring, cover letters, and more.",
+          severity: "warning",
+        });
+      }
     }
     if (!process.env.ADZUNA_APP_ID || !process.env.ADZUNA_APP_KEY) {
-      apiStatus.messages.push({
+      messages.push({
         service: "Adzuna",
-        message: "⚠️ Adzuna job fetch not configured — add ADZUNA_APP_ID and ADZUNA_APP_KEY to your .env file.",
+        message: "⚠️ Adzuna not configured — add ADZUNA_APP_ID and ADZUNA_APP_KEY to .env.",
         severity: "warning",
       });
     }
     if (!process.env.APIFY_API_TOKEN) {
-      apiStatus.messages.push({
+      messages.push({
         service: "Apify",
-        message: "⚠️ LinkedIn/Indeed scraping not configured — add APIFY_API_TOKEN to your .env file.",
+        message: "⚠️ Apify not configured — add APIFY_API_TOKEN to enable LinkedIn/Indeed scraping.",
         severity: "warning",
       });
     }
 
-    const serializedTopMatches: Job[] = topMatchJobs.map((job) => ({
-      ...job,
-      matchReasons: safeJsonParse(job.matchReasons, []),
-      duplicateSources: safeJsonParse(job.duplicateSources, []),
-      postedDate: job.postedDate?.toISOString() ?? null,
-      closingDate: job.closingDate?.toISOString() ?? null,
-      createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
-      source: job.source as Job["source"],
-      pipelineItem: job.pipelineItem
-        ? {
-            ...job.pipelineItem,
-            stage: job.pipelineItem.stage as import("@/types").PipelineStage,
-            deadline: job.pipelineItem.deadline?.toISOString() ?? null,
-            createdAt: job.pipelineItem.createdAt.toISOString(),
-            updatedAt: job.pipelineItem.updatedAt.toISOString(),
-          }
-        : null,
-    }));
+    const totalApplied = (stageMap["applied"] ?? 0) + (stageMap["phone_screen"] ?? 0) + (stageMap["interview"] ?? 0) + (stageMap["offer"] ?? 0) + (stageMap["rejected"] ?? 0);
+    const offerRate = totalApplied > 0 ? Math.round(((stageMap["offer"] ?? 0) / totalApplied) * 100) : 0;
 
     return NextResponse.json({
-      totalJobs,
-      avgMatchScore: Math.round(scoredJobs._avg.matchScore ?? 0),
+      totalJobs: totalJobs ?? 0,
+      avgMatchScore,
       applied: stageMap["applied"] ?? 0,
       interviews: stageMap["interview"] ?? 0,
       offers: stageMap["offer"] ?? 0,
+      rejected: stageMap["rejected"] ?? 0,
+      offerRate,
       newSinceLastVisit,
-      topMatches: serializedTopMatches,
-      apiStatus,
+      topMatches: topMatches ?? [],
       lastFetch: lastFetchSetting?.value ?? null,
-      unreadNotifications: notifications,
+      unreadNotifications: unreadNotifications ?? 0,
+      apiStatus: { messages },
     });
   } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     console.error("Dashboard error:", err);
-    return NextResponse.json({ error: "Failed to load dashboard" }, { status: 500 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

@@ -1,85 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { safeJsonParse } from "@/lib/utils";
+import { requireUser, AuthError } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
+    const { supabase, user } = await requireUser();
     const { searchParams } = new URL(req.url);
 
-    const search = searchParams.get("search") || undefined;
-    const jobType = searchParams.get("jobType") || undefined;
-    const location = searchParams.get("location") || undefined;
-    const seniority = searchParams.get("seniority") || undefined;
-    const source = searchParams.get("source") || undefined;
+    const search = searchParams.get("search");
+    const jobType = searchParams.get("jobType");
+    const location = searchParams.get("location");
+    const seniority = searchParams.get("seniority");
+    const source = searchParams.get("source");
     const sortBy = searchParams.get("sortBy") || "score";
-    const minScore = searchParams.get("minScore") ? Number(searchParams.get("minScore")) : undefined;
-    const saved = searchParams.get("saved") === "true" ? true : undefined;
+    const minScore = searchParams.get("minScore") ? Number(searchParams.get("minScore")) : null;
+    const saved = searchParams.get("saved") === "true";
     const page = Number(searchParams.get("page") || "1");
     const pageSize = Number(searchParams.get("pageSize") || "20");
 
-    // Build where clause
-    const where: Record<string, unknown> = {};
+    let query = supabase
+      .from("jobs")
+      .select("*, pipeline_item:pipeline_items(*)", { count: "exact" })
+      .eq("user_id", user.id);
 
     if (search) {
-      where.OR = [
-        { title: { contains: search } },
-        { company: { contains: search } },
-        { description: { contains: search } },
-      ];
+      query = query.or(`title.ilike.%${search}%,company.ilike.%${search}%,description.ilike.%${search}%`);
     }
-    if (jobType) where.jobType = jobType;
-    if (location) where.location = { contains: location };
-    if (seniority) where.seniority = seniority;
-    if (source) where.source = source;
-    if (minScore !== undefined) where.matchScore = { gte: minScore };
-    if (saved !== undefined) where.saved = saved;
+    if (jobType) query = query.eq("job_type", jobType);
+    if (location) query = query.ilike("location", `%${location}%`);
+    if (seniority) query = query.eq("seniority", seniority);
+    if (source) query = query.eq("source", source);
+    if (minScore !== null) query = query.gte("match_score", minScore);
+    if (saved) query = query.eq("saved", true);
 
-    // Build order clause
-    let orderBy: Record<string, string> | Array<Record<string, string>> = { createdAt: "desc" };
-    if (sortBy === "score") orderBy = [{ matchScore: "desc" }, { createdAt: "desc" }];
-    if (sortBy === "newest") orderBy = { postedDate: "desc" };
-    if (sortBy === "salary") orderBy = [{ salaryMax: "desc" }, { salaryMin: "desc" }];
+    if (sortBy === "score") query = query.order("match_score", { ascending: false }).order("created_at", { ascending: false });
+    else if (sortBy === "newest") query = query.order("posted_date", { ascending: false, nullsFirst: false });
+    else if (sortBy === "salary") query = query.order("salary_max", { ascending: false, nullsFirst: false });
+    else query = query.order("created_at", { ascending: false });
 
-    const [jobs, total] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: { pipelineItem: true },
-      }),
-      prisma.job.count({ where }),
-    ]);
+    query = query.range((page - 1) * pageSize, page * pageSize - 1);
 
-    const serialized = jobs.map((job) => ({
-      ...job,
-      matchReasons: safeJsonParse(job.matchReasons, []),
-      duplicateSources: safeJsonParse(job.duplicateSources, []),
-      postedDate: job.postedDate?.toISOString() ?? null,
-      closingDate: job.closingDate?.toISOString() ?? null,
-      createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
-      pipelineItem: job.pipelineItem
-        ? {
-            ...job.pipelineItem,
-            deadline: job.pipelineItem.deadline?.toISOString() ?? null,
-            createdAt: job.pipelineItem.createdAt.toISOString(),
-            updatedAt: job.pipelineItem.updatedAt.toISOString(),
-          }
-        : null,
+    const { data: jobs, count, error } = await query;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Flatten pipeline_item (Supabase returns it as array from FK)
+    const normalized = (jobs ?? []).map((j) => ({
+      ...j,
+      pipeline_item: Array.isArray(j.pipeline_item) ? (j.pipeline_item[0] ?? null) : j.pipeline_item,
     }));
 
     return NextResponse.json({
-      jobs: serialized,
-      total,
+      jobs: normalized,
+      total: count ?? 0,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil((count ?? 0) / pageSize),
     });
   } catch (err) {
-    console.error("Jobs GET error:", err);
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     return NextResponse.json({ error: "Failed to load jobs" }, { status: 500 });
   }
 }

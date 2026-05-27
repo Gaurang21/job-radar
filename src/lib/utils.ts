@@ -8,20 +8,13 @@ export function cn(...inputs: ClassValue[]) {
 
 // ─── JSON Helpers ─────────────────────────────────────────────
 
-export function safeJsonParse<T>(str: string | null | undefined, fallback: T): T {
-  if (!str) return fallback;
+export function safeJsonParse<T>(str: string | null | undefined | T, fallback: T): T {
+  if (str == null) return fallback;
+  if (typeof str !== "string") return str as T;
   try {
     return JSON.parse(str) as T;
   } catch {
     return fallback;
-  }
-}
-
-export function safeJsonStringify(val: unknown): string {
-  try {
-    return JSON.stringify(val);
-  } catch {
-    return "[]";
   }
 }
 
@@ -54,9 +47,19 @@ export function isClosingSoon(dateStr: string | null | undefined): boolean {
   try {
     const date = parseISO(dateStr);
     if (!isValid(date)) return false;
-    const now = new Date();
-    const diffDays = (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    const diffDays = (date.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return diffDays >= 0 && diffDays <= 3;
+  } catch {
+    return false;
+  }
+}
+
+export function isWithinHours(dateStr: string | null | undefined, hours: number): boolean {
+  if (!dateStr) return false;
+  try {
+    const date = parseISO(dateStr);
+    if (!isValid(date)) return false;
+    return Date.now() - date.getTime() < hours * 60 * 60 * 1000;
   } catch {
     return false;
   }
@@ -92,13 +95,6 @@ export function getScoreColor(score: number | null | undefined): string {
   return "text-signal-error";
 }
 
-export function getScoreBg(score: number | null | undefined): string {
-  if (score == null) return "bg-signal-muted/20";
-  if (score >= 80) return "bg-signal-success/20 border-signal-success/40";
-  if (score >= 50) return "bg-signal-warning/20 border-signal-warning/40";
-  return "bg-signal-error/20 border-signal-error/40";
-}
-
 export function getScoreLabel(score: number | null | undefined): string {
   if (score == null) return "Not scored";
   if (score >= 80) return "Strong Match";
@@ -124,11 +120,7 @@ export function generateExternalId(source: string, title: string, company: strin
   return `${source}_${Math.abs(hash)}`;
 }
 
-export function slugify(str: string): string {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
-// ─── Job Type / Seniority Normalizers ────────────────────────
+// ─── Job Normalizers ──────────────────────────────────────────
 
 export function normalizeJobType(raw?: string | null): string | null {
   if (!raw) return null;
@@ -147,4 +139,22 @@ export function normalizeSeniority(title: string, raw?: string | null): string |
   if (combined.includes("junior") || combined.includes(" jr ") || combined.includes("jr.") || combined.includes("entry")) return "junior";
   if (combined.includes("intern")) return "intern";
   return "mid";
+}
+
+// ─── DB row → camelCase ProfileShape helpers ─────────────────
+
+export function rowToProfile(row: Record<string, unknown> | null): import("@/types").ParsedProfile | null {
+  if (!row) return null;
+  return {
+    rawText: (row.raw_text as string) ?? "",
+    skills: Array.isArray(row.skills) ? (row.skills as string[]) : safeJsonParse<string[]>(row.skills as string, []),
+    titles: Array.isArray(row.titles) ? (row.titles as string[]) : safeJsonParse<string[]>(row.titles as string, []),
+    experienceYears: (row.experience_years as number) ?? 0,
+    education: Array.isArray(row.education) ? (row.education as import("@/types").Education[]) : safeJsonParse(row.education as string, []),
+    location: (row.location as string) ?? undefined,
+    desiredRole: (row.desired_role as string) ?? undefined,
+    summary: (row.summary as string) ?? undefined,
+    filePath: (row.file_path as string) ?? undefined,
+    version: (row.version as number) ?? 1,
+  };
 }

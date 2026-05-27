@@ -1,56 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { safeJsonParse } from "@/lib/utils";
+import { requireUser, AuthError } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const job = await prisma.job.findUnique({
-      where: { id: params.id },
-      include: { pipelineItem: true },
-    });
-
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
+    const { supabase, user } = await requireUser();
+    const { data: job, error } = await supabase
+      .from("jobs")
+      .select("*, pipeline_item:pipeline_items(*)")
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
     return NextResponse.json({
       job: {
         ...job,
-        matchReasons: safeJsonParse(job.matchReasons, []),
-        duplicateSources: safeJsonParse(job.duplicateSources, []),
-        postedDate: job.postedDate?.toISOString() ?? null,
-        closingDate: job.closingDate?.toISOString() ?? null,
-        createdAt: job.createdAt.toISOString(),
-        updatedAt: job.updatedAt.toISOString(),
-        pipelineItem: job.pipelineItem
-          ? {
-              ...job.pipelineItem,
-              deadline: job.pipelineItem.deadline?.toISOString() ?? null,
-              createdAt: job.pipelineItem.createdAt.toISOString(),
-              updatedAt: job.pipelineItem.updatedAt.toISOString(),
-            }
-          : null,
+        pipeline_item: Array.isArray(job.pipeline_item) ? (job.pipeline_item[0] ?? null) : job.pipeline_item,
       },
     });
-  } catch {
-    return NextResponse.json({ error: "Failed to load job" }, { status: 500 });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const { supabase, user } = await requireUser();
     const body = await req.json();
-    const job = await prisma.job.update({
-      where: { id: params.id },
-      data: {
-        saved: body.saved !== undefined ? body.saved : undefined,
-      },
-    });
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.saved !== undefined) updates.saved = body.saved;
 
-    return NextResponse.json({ success: true, job });
-  } catch {
-    return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
+    const { data, error } = await supabase
+      .from("jobs")
+      .update(updates)
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, job: data });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

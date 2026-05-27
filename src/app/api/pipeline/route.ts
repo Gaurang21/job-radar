@@ -1,70 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { safeJsonParse } from "@/lib/utils";
+import { requireUser, AuthError } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const items = await prisma.pipelineItem.findMany({
-      include: { job: true },
-      orderBy: { updatedAt: "desc" },
-    });
-
-    const serialized = items.map((item) => ({
-      ...item,
-      deadline: item.deadline?.toISOString() ?? null,
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-      job: item.job
-        ? {
-            ...item.job,
-            matchReasons: safeJsonParse(item.job.matchReasons, []),
-            postedDate: item.job.postedDate?.toISOString() ?? null,
-            closingDate: item.job.closingDate?.toISOString() ?? null,
-            createdAt: item.job.createdAt.toISOString(),
-            updatedAt: item.job.updatedAt.toISOString(),
-          }
-        : null,
-    }));
-
-    return NextResponse.json({ items: serialized });
-  } catch {
-    return NextResponse.json({ error: "Failed to load pipeline" }, { status: 500 });
+    const { supabase, user } = await requireUser();
+    const { data: items, error } = await supabase
+      .from("pipeline_items")
+      .select("*, job:jobs(*), history:pipeline_history(*)")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ items: items ?? [] });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const { supabase, user } = await requireUser();
     const { jobId, stage } = await req.json();
     if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
 
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    // Verify the job belongs to this user
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id")
+      .eq("id", jobId)
+      .eq("user_id", user.id)
+      .maybeSingle();
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-    const item = await prisma.pipelineItem.upsert({
-      where: { jobId },
-      create: { jobId, stage: stage || "saved" },
-      update: { stage: stage || "saved" },
-      include: { job: true },
-    });
+    const { data: item, error } = await supabase
+      .from("pipeline_items")
+      .upsert({
+        user_id: user.id,
+        job_id: jobId,
+        stage: stage || "saved",
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "job_id" })
+      .select("*, job:jobs(*)")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Also mark job as saved
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { saved: true },
-    });
+    await supabase.from("jobs").update({ saved: true }).eq("id", jobId);
 
-    return NextResponse.json({
-      success: true,
-      item: {
-        ...item,
-        deadline: item.deadline?.toISOString() ?? null,
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.updatedAt.toISOString(),
-      },
-    });
-  } catch {
-    return NextResponse.json({ error: "Failed to add to pipeline" }, { status: 500 });
+    return NextResponse.json({ success: true, item });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

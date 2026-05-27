@@ -1,52 +1,40 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { sendEmailDigest } from "@/lib/email";
-import { safeJsonParse } from "@/lib/utils";
-import type { Job } from "@/types";
+import { requireUser, AuthError } from "@/lib/supabase/server";
+import { sendEmailDigest } from "@/services/emailService";
 
 export const runtime = "nodejs";
 
 export async function POST() {
   try {
-    const recipientEmail = process.env.DIGEST_EMAIL_TO;
-    if (!recipientEmail) {
-      return NextResponse.json(
-        { error: "DIGEST_EMAIL_TO not configured in .env" },
-        { status: 400 }
-      );
+    const { supabase, user } = await requireUser();
+
+    // Check user's digest preference
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("digest_opt_in, email")
+      .eq("id", user.id)
+      .maybeSingle();
+    const recipient = profile?.email ?? user.email;
+    if (!recipient) return NextResponse.json({ error: "No recipient email" }, { status: 400 });
+    if (profile?.digest_opt_in === false) {
+      return NextResponse.json({ error: "Digest opt-out enabled in settings" }, { status: 400 });
     }
 
-    const jobs = await prisma.job.findMany({
-      where: { matchScore: { gt: 0 } },
-      orderBy: { matchScore: "desc" },
-      take: 20,
-    });
+    const { data: jobs } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("user_id", user.id)
+      .gt("match_score", 0)
+      .order("match_score", { ascending: false })
+      .limit(20);
 
-    const serializedJobs: Job[] = jobs.map((job) => ({
-      ...job,
-      matchReasons: safeJsonParse(job.matchReasons, []),
-      duplicateSources: safeJsonParse(job.duplicateSources, []),
-      postedDate: job.postedDate?.toISOString() ?? null,
-      closingDate: job.closingDate?.toISOString() ?? null,
-      createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
-      source: job.source as Job["source"],
-    }));
-
-    const result = await sendEmailDigest(serializedJobs, recipientEmail);
-
+    const result = await sendEmailDigest(jobs ?? [], recipient);
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error, code: "RESEND_ERROR" },
-        { status: 503 }
-      );
+      return NextResponse.json({ error: result.error, code: "RESEND_ERROR" }, { status: 503 });
     }
-
-    return NextResponse.json({ success: true, sentTo: recipientEmail });
+    return NextResponse.json({ success: true, sentTo: recipient });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message },
-      { status: 500 }
-    );
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

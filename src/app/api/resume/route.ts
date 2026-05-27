@@ -1,170 +1,152 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseResume } from "@/lib/resume-parser";
-import { prisma } from "@/lib/prisma";
-import { safeJsonStringify } from "@/lib/utils";
+import { requireUser, AuthError } from "@/lib/supabase/server";
+import { parseResume } from "@/services/resumeParser";
+import { resolveAIContext } from "@/lib/ai-context";
+import { rowToProfile } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
+    const { supabase, user } = await requireUser();
+
     const formData = await req.formData();
     const file = formData.get("resume") as File | null;
-
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-
-    const allowedTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/msword",
-      "text/plain",
-    ];
-
-    if (!allowedTypes.some((t) => file.type.includes(t.split("/")[1])) && !file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) {
-      return NextResponse.json(
-        { error: "Only PDF, DOCX, and TXT files are supported" },
-        { status: 400 }
-      );
-    }
+    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
 
     if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "File size must be under 10MB" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "File must be under 10MB" }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Determine MIME type
     let mimeType = file.type;
     if (!mimeType && file.name.endsWith(".pdf")) mimeType = "application/pdf";
     if (!mimeType && file.name.endsWith(".docx")) mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-    // Parse the resume
-    const parsed = await parseResume(buffer, mimeType);
+    // Resolve AI context (per-user key or env)
+    const ctx = await resolveAIContext(supabase, user.id);
 
-    // Upsert the profile (only one profile at a time)
-    const existingProfile = await prisma.profile.findFirst();
+    // Parse via Claude
+    const parsed = await parseResume(buffer, mimeType, { apiKey: ctx.apiKey });
 
-    const profile = await prisma.profile.upsert({
-      where: { id: existingProfile?.id ?? "new" },
-      create: {
-        rawText: parsed.rawText,
-        skills: safeJsonStringify(parsed.skills),
-        titles: safeJsonStringify(parsed.titles),
-        experienceYears: parsed.experienceYears,
-        education: safeJsonStringify(parsed.education),
-        location: parsed.location,
-        desiredRole: parsed.desiredRole,
-        summary: parsed.summary,
-      },
-      update: {
-        rawText: parsed.rawText,
-        skills: safeJsonStringify(parsed.skills),
-        titles: safeJsonStringify(parsed.titles),
-        experienceYears: parsed.experienceYears,
-        education: safeJsonStringify(parsed.education),
-        location: parsed.location,
-        desiredRole: parsed.desiredRole,
-        summary: parsed.summary,
-      },
-    });
+    // Upload file to Supabase Storage
+    const filePath = `${user.id}/resume-${Date.now()}.${file.name.split(".").pop()}`;
+    const { error: uploadError } = await supabase.storage
+      .from("resumes")
+      .upload(filePath, buffer, { contentType: mimeType, upsert: true });
+    if (uploadError) console.error("Storage upload error:", uploadError);
 
-    // If re-uploading, clear old jobs so they get re-scored
-    if (existingProfile) {
-      await prisma.pipelineItem.deleteMany();
-      await prisma.job.deleteMany();
+    // Get existing resume (for version bump)
+    const { data: existing } = await supabase
+      .from("resumes")
+      .select("id, version")
+      .eq("user_id", user.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const newVersion = (existing?.version ?? 0) + 1;
+
+    // Delete existing resumes (keep only latest)
+    if (existing) {
+      await supabase.from("resumes").delete().eq("user_id", user.id);
     }
 
-    return NextResponse.json({
-      success: true,
-      profile: {
-        ...profile,
+    const { data: profile, error: insertError } = await supabase
+      .from("resumes")
+      .insert({
+        user_id: user.id,
+        version: newVersion,
+        raw_text: parsed.rawText,
         skills: parsed.skills,
         titles: parsed.titles,
+        experience_years: parsed.experienceYears,
         education: parsed.education,
-      },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to parse resume";
-    console.error("Resume parse error:", err);
+        location: parsed.location ?? null,
+        desired_role: parsed.desiredRole ?? null,
+        summary: parsed.summary ?? null,
+        file_path: filePath,
+      })
+      .select()
+      .single();
 
-    if (message.includes("API") || message.includes("anthropic") || message.includes("credit")) {
-      return NextResponse.json(
-        {
-          error: "AI parsing failed",
-          details: "Your Anthropic API key is invalid or out of credits. Visit console.anthropic.com to check.",
-          code: "ANTHROPIC_ERROR",
-        },
-        { status: 503 }
-      );
+    if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
+    // If re-uploading, clear old jobs so they get re-scored
+    if (existing) {
+      await supabase.from("jobs").delete().eq("user_id", user.id);
+    }
+
+    return NextResponse.json({ success: true, profile: rowToProfile(profile) });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    const message = err instanceof Error ? err.message : "Failed to parse resume";
+    console.error("Resume parse error:", err);
+    if (message.includes("API") || message.includes("anthropic") || message.includes("credit") || message.includes("401")) {
+      return NextResponse.json({
+        error: "AI parsing failed",
+        details: "Your Anthropic API key is invalid or out of credits.",
+        code: "ANTHROPIC_ERROR",
+      }, { status: 503 });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function GET() {
   try {
-    const profile = await prisma.profile.findFirst({
-      orderBy: { updatedAt: "desc" },
-    });
-
-    if (!profile) {
-      return NextResponse.json({ profile: null });
-    }
-
-    const { safeJsonParse } = await import("@/lib/utils");
-
-    return NextResponse.json({
-      profile: {
-        ...profile,
-        skills: safeJsonParse(profile.skills, []),
-        titles: safeJsonParse(profile.titles, []),
-        education: safeJsonParse(profile.education, []),
-      },
-    });
+    const { supabase, user } = await requireUser();
+    const { data: profile } = await supabase
+      .from("resumes")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return NextResponse.json({ profile: rowToProfile(profile) });
   } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     return NextResponse.json({ error: "Failed to load profile" }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    const { supabase, user } = await requireUser();
     const body = await req.json();
-    const existingProfile = await prisma.profile.findFirst();
-    if (!existingProfile) {
-      return NextResponse.json({ error: "No profile found" }, { status: 404 });
-    }
 
-    const { safeJsonStringify } = await import("@/lib/utils");
+    const { data: existing } = await supabase
+      .from("resumes")
+      .select("id, version")
+      .eq("user_id", user.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!existing) return NextResponse.json({ error: "No profile found" }, { status: 404 });
 
-    const updated = await prisma.profile.update({
-      where: { id: existingProfile.id },
-      data: {
-        skills: safeJsonStringify(body.skills ?? []),
-        titles: safeJsonStringify(body.titles ?? []),
-        experienceYears: body.experienceYears ?? existingProfile.experienceYears,
-        education: safeJsonStringify(body.education ?? []),
-        location: body.location ?? existingProfile.location,
-        desiredRole: body.desiredRole ?? existingProfile.desiredRole,
-        summary: body.summary ?? existingProfile.summary,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      profile: {
-        ...updated,
+    const { data: updated, error } = await supabase
+      .from("resumes")
+      .update({
         skills: body.skills ?? [],
         titles: body.titles ?? [],
+        experience_years: body.experienceYears ?? 0,
         education: body.education ?? [],
-      },
-    });
+        location: body.location ?? null,
+        desired_role: body.desiredRole ?? null,
+        summary: body.summary ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, profile: rowToProfile(updated) });
   } catch (err) {
-    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
   }
 }

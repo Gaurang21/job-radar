@@ -1,28 +1,27 @@
-# ◉ JobRadar
+# JobRadar — AI-Powered Job Search Platform
 
-An AI-powered job search platform that parses your resume, fetches relevant jobs from multiple sources, and ranks them by match score using Claude AI.
-
-![JobRadar Screenshot](https://raw.githubusercontent.com/gaurang21/job-radar/main/public/preview.png)
-
----
+JobRadar is a multi-user, AI-powered job search platform built with **Next.js 14**, **Supabase**, and **Claude AI**. It aggregates jobs from multiple sources, scores them against your resume, and provides 10 AI-powered features to accelerate your job search.
 
 ## ✨ Features
 
-- **Resume Parsing** — Upload PDF/DOCX, Claude AI extracts skills, titles, experience, education
-- **AI Match Scoring** — Every job gets a 0–100 match score vs your profile
-- **Multi-Source Jobs** — Adzuna (primary), LinkedIn & Indeed via Apify (secondary)
-- **Job Board** — Filter, sort, search with beautiful cards
-- **Pipeline (Kanban)** — Drag & drop through Saved → Applied → Interview → Offer
-- **Cover Letter AI** — Generate tailored cover letters for any job
-- **Email Digest** — Daily top-10 matches sent to your inbox via Resend
-- **Browser Extension** — Save jobs from any site with a floating button
-- **Persistent SQLite DB** — Profile & jobs survive restarts, no re-upload needed
-
----
+- **AI Match Scoring** — Every job scored 0–100 against your resume
+- **Why You Match** — Explanation of why a job fits your profile
+- **Job Summaries** — 5-bullet AI summaries of any job
+- **Skill Gap Analysis** — Identify and address missing skills
+- **Cover Letter Generator** — Personalized letters with tone selector (formal/friendly/concise)
+- **Interview Prep Coach** — 8-10 tailored questions with answer frameworks
+- **Outreach Email Drafter** — Cold email drafts with tone control
+- **LinkedIn Profile Analyzer** — Score and optimize your LinkedIn profile
+- **Market Pulse** — Weekly AI summary of your job market (24h cached)
+- **Rejection Pattern Analyzer** — Find patterns after 5+ rejections
+- **Kanban Pipeline** — Track applications through all stages
+- **Multi-Source Aggregation** — Adzuna + LinkedIn (Apify) + Indeed (Apify)
+- **Browser Extension** — Save jobs from any site with one click
+- **Email Digest** — Daily top-matches digest via Resend
 
 ## 🚀 Quick Start
 
-### 1. Clone & Install
+### 1. Clone and Install
 
 ```bash
 git clone https://github.com/gaurang21/job-radar.git
@@ -30,210 +29,195 @@ cd job-radar
 npm install
 ```
 
-### 2. Set Up Environment Variables
+### 2. Set Up Supabase
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Go to **SQL Editor** and run the entire contents of `supabase/schema.sql`
+3. Enable **Email** authentication in Authentication → Providers
+4. (Optional) Enable **Google** and/or **GitHub** OAuth in Authentication → Providers
+
+### 3. Configure Environment Variables
+
+Copy `.env.example` to `.env.local`:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Edit `.env` and fill in your API keys (see [Getting API Keys](#getting-api-keys) below):
+Fill in the values:
 
 ```env
-DATABASE_URL="file:./jobradar.db"
-ANTHROPIC_API_KEY=sk-ant-...
-ADZUNA_APP_ID=your_app_id
-ADZUNA_APP_KEY=your_app_key
-APIFY_API_TOKEN=apify_api_...
-RESEND_API_KEY=re_...          # Optional
-DIGEST_EMAIL_TO=you@email.com  # Optional
+# Supabase (required)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...  # Settings → API → service_role key
+
+# Encryption key for API keys (generate a 32-byte hex string)
+ENCRYPTION_KEY=your-32-byte-hex-string-here
+
+# AI (optional — users can add their own key in Settings → AI)
+ANTHROPIC_API_KEY=sk-ant-...      # Falls back to user's stored key
+AI_STUB_MODE=false                 # Set to true for demo/dev without API key
+
+# Job Sources (optional)
+ADZUNA_APP_ID=...
+ADZUNA_APP_KEY=...
+APIFY_API_TOKEN=...
+
+# Email (optional)
+RESEND_API_KEY=...
+
+# App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-### 3. Initialize Database
-
+To generate a secure `ENCRYPTION_KEY`:
 ```bash
-npx prisma db push
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 4. Run the App
+### 4. Run Development Server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and upload your resume to get started!
+Open [http://localhost:3000](http://localhost:3000).
 
----
+## 🗄️ Database Setup
 
-## 🔑 Getting API Keys
+Run `supabase/schema.sql` in the Supabase SQL Editor. It creates:
 
-### Anthropic (Claude AI) — Required
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Create an account and add billing
-3. Go to **API Keys** → **Create Key**
-4. Copy to `ANTHROPIC_API_KEY`
+| Table | Description |
+|-------|-------------|
+| `profiles` | User profile data (auto-created on signup) |
+| `resumes` | Parsed resume content + file storage path |
+| `jobs` | Job listings with AI scores |
+| `pipeline_items` | Kanban pipeline entries |
+| `pipeline_history` | Stage change audit log |
+| `notifications` | In-app notifications |
+| `ai_settings` | Per-user AI settings + encrypted API key |
+| `market_trends` | Cached market pulse data |
+| `settings` | Generic key-value settings per user |
 
-### Adzuna — Required for job fetching (free)
-1. Go to [developer.adzuna.com](https://developer.adzuna.com/)
-2. Register for a free account (no credit card needed)
-3. Create an app to get `App ID` and `App Key`
-4. Copy to `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`
-5. **Free tier**: 250 requests/day, resets at midnight UTC
+All tables have **Row Level Security (RLS)** — users can only access their own data.
 
-### Apify — Optional (LinkedIn + Indeed scraping)
-1. Go to [apify.com](https://apify.com) and sign up
-2. Go to **Settings** → **Integrations** → copy your **API Token**
-3. Copy to `APIFY_API_TOKEN`
-4. **Free tier**: ~$5/month credits included
-5. Used actors: LinkedIn Jobs Scraper, Indeed Scraper
+## 🔐 Authentication
 
-### Resend — Optional (email digest)
-1. Go to [resend.com](https://resend.com) and sign up
-2. Create an API key
-3. Copy to `RESEND_API_KEY`
-4. Set `DIGEST_EMAIL_TO` to your email address
+Supported auth methods:
+- **Email/Password** — Built-in Supabase auth
+- **Google OAuth** — Enable in Supabase dashboard
+- **GitHub OAuth** — Enable in Supabase dashboard
 
----
+### OAuth Setup
 
-## ☁️ Deploying to Vercel
+1. Create OAuth app in Google Cloud Console / GitHub Developer Settings
+2. Set callback URL to: `https://your-project.supabase.co/auth/v1/callback`
+3. Add credentials to Supabase Authentication → Providers
 
-JobRadar uses SQLite by default (local only). For Vercel, you need a hosted database.
+## 🤖 AI Configuration
 
-### Option A: Neon PostgreSQL (Recommended — free tier)
+### Option A: Platform-wide key (admin)
+Set `ANTHROPIC_API_KEY` in environment variables. All users share this key.
 
-1. Sign up at [neon.tech](https://neon.tech)
-2. Create a new project and copy the **Connection String**
-3. Update `prisma/schema.prisma`:
-   ```prisma
-   datasource db {
-     provider = "postgresql"  // ← Change from "sqlite"
-     url      = env("DATABASE_URL")
-   }
-   ```
-4. Run `npx prisma generate` to regenerate client
-5. Deploy to Vercel:
+### Option B: Per-user keys (recommended)
+Users add their own Anthropic API key in **Settings → AI Settings**. Keys are encrypted with AES-256-GCM before storage.
 
+### Development without API key
+Set `AI_STUB_MODE=true` — all AI functions return realistic stub data.
+
+## 🌐 Job Sources
+
+### Adzuna (free, 250 req/day)
+1. Register at [developer.adzuna.com](https://developer.adzuna.com)
+2. Add `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`
+
+### LinkedIn + Indeed via Apify
+1. Sign up at [apify.com](https://apify.com) (free tier available)
+2. Add `APIFY_API_TOKEN`
+
+## 📦 Browser Extension
+
+The browser extension lets you save any job from any website with one click.
+
+### Install
+1. Open Chrome → `chrome://extensions/`
+2. Enable **Developer Mode**
+3. Click **Load unpacked** → select the `extension/` folder
+
+### Configuration
+The extension uses your Supabase JWT for authentication. After logging in to the web app, the extension automatically gets your session token.
+
+## 🚀 Deploy to Vercel
+
+### 1. Push to GitHub
 ```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel
-
-# Set environment variables in Vercel dashboard or CLI:
-vercel env add DATABASE_URL
-vercel env add ANTHROPIC_API_KEY
-vercel env add ADZUNA_APP_ID
-vercel env add ADZUNA_APP_KEY
-vercel env add APIFY_API_TOKEN
-vercel env add NEXT_PUBLIC_APP_URL  # Set to your Vercel URL
+git push origin main
 ```
 
-6. After first deploy, run the migration:
-   ```bash
-   DATABASE_URL="your_neon_url" npx prisma db push
-   ```
+### 2. Import to Vercel
+1. Go to [vercel.com](https://vercel.com) → New Project
+2. Import from GitHub: `gaurang21/job-radar`
+3. Framework: **Next.js** (auto-detected)
 
-### Option B: Vercel Postgres (built-in)
+### 3. Add Environment Variables
+In Vercel → Project Settings → Environment Variables, add all variables from `.env.local`.
 
-1. In your Vercel project dashboard → **Storage** → **Create Database** → **Postgres**
-2. Copy the `DATABASE_URL` from the dashboard
-3. Follow the same steps as Option A
+For `NEXT_PUBLIC_APP_URL`, set it to your Vercel deployment URL (e.g., `https://job-radar.vercel.app`).
 
-### Important Vercel Notes
+### 4. Update Supabase Settings
+In Supabase → Authentication → URL Configuration:
+- **Site URL**: `https://job-radar.vercel.app`
+- **Redirect URLs**: `https://job-radar.vercel.app/auth/callback`
 
-- File uploads are processed in memory (no disk writes needed)
-- The SQLite `.db` file is gitignored — it stays local
-- First deploy: run `prisma db push` against your hosted DB
-- The `postinstall` script runs `prisma generate` automatically on deploy
+### 5. Deploy
+Click **Deploy** in Vercel. The build should complete in ~2 minutes.
 
----
-
-## 🧩 Browser Extension
-
-Load the `/extension` folder as an unpacked Chrome extension:
-
-1. `chrome://extensions` → Enable Developer Mode
-2. **Load Unpacked** → select the `/extension` folder
-3. Navigate to a job listing and click the floating "Save to JobRadar" button
-
-See [extension/README.md](extension/README.md) for full instructions.
-
----
-
-## 🗄️ Database Schema
+## 🏗️ Architecture
 
 ```
-Profile     — Your parsed resume (one record)
-Job         — Fetched jobs with AI scores
-PipelineItem — Your application stages
-Notification — In-app alerts
-Setting     — App settings (last fetch, last visit)
+src/
+├── app/
+│   ├── (auth)/           # Login, signup, OAuth callback
+│   ├── (dashboard)/      # Protected routes
+│   │   ├── dashboard/    # Main dashboard with stats + widgets
+│   │   ├── jobs/         # Job board with filters
+│   │   ├── pipeline/     # Kanban board
+│   │   ├── profile/      # Resume profile editor
+│   │   ├── settings/
+│   │   │   ├── ai/       # AI Settings (API key, feature toggles)
+│   │   │   └── account/  # Account settings (name, password, digest)
+│   │   └── linkedin-analyzer/  # LinkedIn profile analyzer
+│   └── api/              # API routes
+├── components/
+│   ├── ai/               # InterviewPrepModal, EmailDraftModal
+│   ├── cover-letter/     # CoverLetterModal
+│   ├── jobs/             # JobCard, JobDrawer, JobFilters
+│   ├── layout/           # Navbar
+│   ├── pipeline/         # KanbanBoard
+│   ├── resume/           # ResumeUpload
+│   └── ui/               # Badge, Modal, Spinner
+├── lib/
+│   ├── ai-context.ts     # Resolve AI key (user → env fallback)
+│   ├── crypto.ts         # AES-256-GCM encrypt/decrypt
+│   └── supabase/         # Browser, server, admin clients
+├── services/
+│   ├── aiService.ts      # All 10 AI features + stub mode
+│   ├── adzunaService.ts  # Adzuna job fetching
+│   ├── apifyService.ts   # LinkedIn/Indeed scraping
+│   ├── emailService.ts   # Resend email digest
+│   └── resumeParser.ts   # PDF/DOCX parsing + AI extraction
+└── types/index.ts        # All TypeScript types
 ```
 
-Run `npm run db:studio` to browse the database visually.
+## 🛡️ Security
 
----
+- **RLS** on all database tables — users can only access their own data
+- **AES-256-GCM** encryption for stored Anthropic API keys
+- **Supabase JWT** authentication for all API routes
+- **Bearer token auth** for browser extension endpoint
+- **No secrets** committed — `.env` is gitignored
 
-## 📁 Project Structure
-
-```
-job-radar/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx          # Dashboard
-│   │   ├── jobs/page.tsx     # Job board
-│   │   ├── pipeline/page.tsx # Kanban board
-│   │   ├── profile/page.tsx  # Resume profile
-│   │   └── api/              # API routes
-│   ├── components/           # React components
-│   ├── lib/                  # Core logic
-│   └── store/                # Zustand state
-├── prisma/
-│   └── schema.prisma         # Database schema
-├── extension/                # Browser extension
-├── .env.example              # Environment template
-└── README.md
-```
-
----
-
-## 🔧 Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run start` | Start production server |
-| `npm run db:push` | Sync schema to database |
-| `npm run db:migrate` | Create migration |
-| `npm run db:studio` | Open Prisma Studio |
-
----
-
-## ⚠️ API Error Handling
-
-The app shows clear banners when APIs fail:
-
-- **Anthropic** → Yellow banner: check API key / credits
-- **Adzuna** → Yellow banner: check key / daily limit (250 req)
-- **Apify** → Yellow banner: check token / credits
-- **Resend** → Toast notification
-
-Partial failures still show results from working sources.
-
----
-
-## 🎨 Design
-
-JobRadar uses a "Deep Signal" dark design system:
-- Background: `#030712` (near black)
-- Accent: `#06b6d4` (electric cyan)
-- Secondary: `#818cf8` (violet)
-- Cards: glassmorphism with subtle glow borders
-
----
-
-## 📝 License
+## 📄 License
 
 MIT
