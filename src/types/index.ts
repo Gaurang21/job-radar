@@ -158,6 +158,21 @@ export interface AISettings {
 export type CoverLetterTone = "formal" | "friendly" | "concise";
 export type EmailTone = "formal" | "casual";
 
+// ─── ATS Score ─────────────────────────────────────────────────
+
+export interface ATSScore {
+  overallScore: number;
+  keywordScore: number;
+  skillsScore: number;
+  experienceScore: number;
+  formatScore: number;
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  suggestions: Array<{ priority: "high" | "medium" | "low"; text: string }>;
+  sectionScores: Array<{ section: string; score: number; feedback: string }>;
+  summary: string;
+}
+
 // ─── AI Outputs ────────────────────────────────────────────────
 
 export interface MatchResult {

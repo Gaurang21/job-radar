@@ -8,6 +8,7 @@ import type {
   MarketPulse,
   RejectionPattern,
   LinkedInAnalysis,
+  ATSScore,
   CoverLetterTone,
   EmailTone,
   AISettings,
@@ -710,5 +711,90 @@ function stubResumeParse(rawText: string): ParsedProfile {
     experienceYears: 3,
     education: [],
     summary: "Resume parsed in demo mode. Enable AI in settings for full extraction.",
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ATS Score Checker
+// ═══════════════════════════════════════════════════════════════
+
+export async function scoreATS(
+  ctx: ServiceContext,
+  resumeText: string,
+  jobDescription: string
+): Promise<ATSScore> {
+  const prompt = `You are an expert ATS (Applicant Tracking System) analyst. Score how well this resume would perform when parsed by an ATS for this job description.
+
+ATS systems scan for: exact keyword matches, skills alignment, experience level, education requirements, and resume format/structure.
+
+RESUME:
+---
+${resumeText.slice(0, 4000)}
+---
+
+JOB DESCRIPTION:
+---
+${jobDescription.slice(0, 3000)}
+---
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "overallScore": <0-100>,
+  "keywordScore": <0-100>,
+  "skillsScore": <0-100>,
+  "experienceScore": <0-100>,
+  "formatScore": <0-100>,
+  "matchedKeywords": ["exact keywords/phrases from JD that appear in resume"],
+  "missingKeywords": ["important keywords from JD missing from resume"],
+  "suggestions": [
+    { "priority": "high|medium|low", "text": "specific actionable improvement" }
+  ],
+  "sectionScores": [
+    { "section": "Work Experience", "score": <0-100>, "feedback": "brief feedback" },
+    { "section": "Skills", "score": <0-100>, "feedback": "brief feedback" },
+    { "section": "Education", "score": <0-100>, "feedback": "brief feedback" },
+    { "section": "Summary/Objective", "score": <0-100>, "feedback": "brief feedback" }
+  ],
+  "summary": "<2-3 sentences summarising the ATS compatibility and top priority fix>"
+}
+
+Scoring guide:
+- keywordScore: % of critical JD keywords found in resume (exact + close variants)
+- skillsScore: alignment of listed skills with required/preferred skills
+- experienceScore: years/level match, relevant role titles, industry overlap
+- formatScore: ATS-friendly structure (no tables/graphics in text, clear sections, standard headings)
+- overallScore: weighted average (keywords 35%, skills 30%, experience 25%, format 10%)
+
+Be precise and realistic. Missing a required keyword should significantly hurt keywordScore.`;
+
+  const text = await callClaude(ctx, prompt, { maxTokens: 2000, model: POWERFUL_MODEL });
+  if (!text) return stubATSScore();
+
+  return parseJsonResponse<ATSScore>(text, stubATSScore());
+}
+
+function stubATSScore(): ATSScore {
+  return {
+    overallScore: 68,
+    keywordScore: 62,
+    skillsScore: 75,
+    experienceScore: 70,
+    formatScore: 80,
+    matchedKeywords: ["React", "TypeScript", "Node.js", "REST API", "Agile", "Git"],
+    missingKeywords: ["Kubernetes", "GraphQL", "AWS Lambda", "CI/CD pipelines", "microservices"],
+    suggestions: [
+      { priority: "high", text: "Add 'Kubernetes' and 'AWS Lambda' to your skills section — these appear 4+ times in the JD." },
+      { priority: "high", text: "Mention 'microservices architecture' explicitly; the JD requires this experience." },
+      { priority: "medium", text: "Add quantified achievements: include % improvements, team sizes, and revenue impact." },
+      { priority: "medium", text: "Use 'CI/CD' explicitly rather than just listing tools — ATS scans for the term." },
+      { priority: "low", text: "Add a 2-3 sentence professional summary at the top targeting this role." },
+    ],
+    sectionScores: [
+      { section: "Work Experience", score: 70, feedback: "Good progression but lacks measurable outcomes and some required tech keywords." },
+      { section: "Skills", score: 75, feedback: "Core skills present; missing cloud-native and DevOps keywords required by JD." },
+      { section: "Education", score: 90, feedback: "Meets requirements." },
+      { section: "Summary/Objective", score: 40, feedback: "No summary section — add one tailored to this role for a significant ATS boost." },
+    ],
+    summary: "Your resume scores 68/100 for ATS compatibility. The main gaps are missing cloud/DevOps keywords (Kubernetes, AWS Lambda, microservices) that appear repeatedly in the JD. Adding a targeted summary and these keywords could push your score above 80. (Demo mode — enable AI for real analysis.)",
   };
 }

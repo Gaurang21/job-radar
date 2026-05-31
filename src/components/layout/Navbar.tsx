@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard, Briefcase, KanbanSquare, User as UserIcon,
-  Bell, RefreshCw, Settings, LogOut, ChevronDown, Sparkles, Linkedin,
+  Bell, RefreshCw, Settings, LogOut, ChevronDown, Sparkles, Linkedin, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -16,6 +16,7 @@ const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/ats-checker", label: "ATS Check", icon: FileText },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
 
