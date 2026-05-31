@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Routes that require authentication
 const PROTECTED_PREFIXES = ["/dashboard", "/jobs", "/pipeline", "/profile", "/settings", "/linkedin-analyzer", "/ats-checker"];
 // Routes that are auth-only (redirect to dashboard if signed in)
-const AUTH_PAGES = ["/login", "/signup"];
+const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

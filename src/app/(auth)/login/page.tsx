@@ -1,16 +1,29 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Github, Loader2 } from "lucide-react";
+import { Mail, Lock, Github, Loader2, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
+
+const AUTH_ERRORS: Record<string, string> = {
+  auth_failed: "Authentication failed. Please try again.",
+  email_not_confirmed: "Please confirm your email before signing in.",
+  access_denied: "Access was denied. Please try again.",
+};
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/dashboard";
+  const errorCode = searchParams.get("error");
   const supabase = createClient();
+
+  useEffect(() => {
+    if (errorCode && AUTH_ERRORS[errorCode]) {
+      toast.error(AUTH_ERRORS[errorCode]);
+    }
+  }, [errorCode]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -123,7 +136,13 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-gray-500">
+      <div className="mt-4 text-center">
+        <Link href="/forgot-password" className="text-sm text-gray-500 hover:text-signal-cyan transition-colors">
+          Forgot your password?
+        </Link>
+      </div>
+
+      <p className="mt-6 text-center text-sm text-gray-500">
         Don't have an account?{" "}
         <Link href="/signup" className="text-signal-cyan hover:underline">
           Sign up
