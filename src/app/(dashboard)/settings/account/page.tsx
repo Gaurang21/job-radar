@@ -98,10 +98,15 @@ export default function AccountSettingsPage() {
     if (deleteConfirmText !== "delete my account") return;
     setIsDeletingAccount(true);
     try {
-      // Sign out first, then the backend would need to handle account deletion
-      // For now, we sign out and show a message
+      const res = await fetch("/api/settings", { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete account");
+        setIsDeletingAccount(false);
+        return;
+      }
       await supabase.auth.signOut();
-      toast.success("Signed out. Contact support to delete your data.");
+      toast.success("Account deleted. Goodbye!");
       router.push("/");
     } catch {
       toast.error("Failed to delete account");
@@ -253,7 +258,7 @@ export default function AccountSettingsPage() {
               <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
                 <p className="text-xs text-red-300">
-                  This will sign you out. All your data will be deleted upon request to support.
+                  This permanently deletes your account, resume, jobs, pipeline, and all associated data. This cannot be undone.
                   Type <code className="font-mono font-bold">delete my account</code> to confirm.
                 </p>
               </div>

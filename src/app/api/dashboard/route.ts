@@ -15,6 +15,7 @@ export async function GET() {
       { data: topMatches },
       { data: lastFetchSetting },
       { data: lastVisitSetting },
+      { data: resumeRow },
     ] = await Promise.all([
       supabase.from("jobs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       supabase.from("jobs").select("match_score").eq("user_id", user.id).gt("match_score", 0),
@@ -23,6 +24,7 @@ export async function GET() {
       supabase.from("jobs").select("*").eq("user_id", user.id).gt("match_score", 0).order("match_score", { ascending: false }).limit(3),
       supabase.from("settings").select("value").eq("user_id", user.id).eq("key", "lastJobFetch").maybeSingle(),
       supabase.from("settings").select("value").eq("user_id", user.id).eq("key", "lastVisit").maybeSingle(),
+      supabase.from("resumes").select("id").eq("user_id", user.id).limit(1).maybeSingle(),
     ]);
 
     // Calc avg score
@@ -102,6 +104,7 @@ export async function GET() {
       topMatches: topMatches ?? [],
       lastFetch: lastFetchSetting?.value ?? null,
       unreadNotifications: unreadNotifications ?? 0,
+      hasProfile: !!resumeRow,
       apiStatus: { messages },
     });
   } catch (err) {

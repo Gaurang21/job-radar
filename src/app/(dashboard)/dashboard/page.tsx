@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Briefcase, TrendingUp, Send, MessageSquare, Trophy,
   XCircle, Sparkles, RefreshCw, AlertTriangle, Brain,
-  ArrowRight, ChevronDown, ChevronUp,
+  ArrowRight, ChevronDown, ChevronUp, Upload, Zap, KanbanSquare,
 } from "lucide-react";
 import JobCard from "@/components/jobs/JobCard";
 import JobDrawer from "@/components/jobs/JobDrawer";
@@ -27,6 +27,7 @@ interface DashboardStats {
   topMatches: Job[];
   lastFetch: string | null;
   unreadNotifications: number;
+  hasProfile: boolean;
   apiStatus: { messages: Array<{ service: string; message: string; severity: string }> };
 }
 
@@ -119,6 +120,62 @@ export default function DashboardPage() {
             : "No jobs fetched yet — use Refresh to get started"}
         </p>
       </div>
+
+      {/* Onboarding banner — shown until user uploads a resume */}
+      {stats && !stats.hasProfile && (
+        <div className="mb-8 rounded-2xl border border-signal-cyan/20 bg-gradient-to-br from-signal-cyan/5 to-signal-violet/5 p-6">
+          <h2 className="text-base font-semibold text-gray-100 mb-1">Welcome to JobRadar! Let&apos;s get you set up.</h2>
+          <p className="text-sm text-gray-400 mb-5">Follow these three steps to start getting AI-ranked job matches tailored to your resume.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                step: 1,
+                icon: Upload,
+                title: "Upload your resume",
+                desc: "PDF or DOCX — Claude will extract your skills, experience, and goals.",
+                href: "/profile",
+                color: "text-signal-cyan",
+                border: "border-signal-cyan/20",
+                bg: "bg-signal-cyan/10",
+              },
+              {
+                step: 2,
+                icon: Zap,
+                title: "Fetch job matches",
+                desc: "Hit Refresh to pull jobs from LinkedIn, Indeed, and Adzuna — auto-scored against your profile.",
+                href: null,
+                color: "text-signal-violet",
+                border: "border-signal-violet/20",
+                bg: "bg-signal-violet/10",
+              },
+              {
+                step: 3,
+                icon: KanbanSquare,
+                title: "Track your pipeline",
+                desc: "Move applications through stages: Applied → Interview → Offer.",
+                href: "/pipeline",
+                color: "text-emerald-400",
+                border: "border-emerald-500/20",
+                bg: "bg-emerald-500/10",
+              },
+            ].map(({ step, icon: Icon, title, desc, href, color, border, bg }) => (
+              <div key={step} className={`rounded-xl border ${border} ${bg} p-4`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-gray-500">STEP {step}</span>
+                </div>
+                <Icon className={`h-5 w-5 mb-2 ${color}`} />
+                <p className="text-sm font-semibold text-gray-200 mb-1">{title}</p>
+                <p className="text-xs text-gray-500 mb-3">{desc}</p>
+                {href && (
+                  <Link href={href} className={`inline-flex items-center gap-1 text-xs font-medium ${color} hover:opacity-80 transition-opacity`}>
+                    Get started <ArrowRight className="h-3 w-3" />
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* API status warnings */}
       {(stats?.apiStatus.messages?.length ?? 0) > 0 && (

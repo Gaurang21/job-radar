@@ -2,7 +2,54 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser, AuthError } from "@/lib/supabase/server";
 import { encrypt, decrypt, maskKey } from "@/lib/crypto";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+
 export const runtime = "nodejs";
+
+export async function DELETE() {
+  try {
+    const { user, supabase } = await requireUser();
+
+    // Gather pipeline item IDs first, then delete history
+    const { data: pipelineItems } = await supabase
+      .from("pipeline_items")
+      .select("id")
+      .eq("user_id", user.id);
+    const pipelineIds = (pipelineItems ?? []).map((r) => r.id);
+
+    await Promise.all([
+      pipelineIds.length > 0
+        ? supabase.from("pipeline_history").delete().in("pipeline_item_id", pipelineIds)
+        : Promise.resolve(),
+      supabase.from("notifications").delete().eq("user_id", user.id),
+    ]);
+    await supabase.from("pipeline_items").delete().eq("user_id", user.id);
+    await supabase.from("jobs").delete().eq("user_id", user.id);
+    await supabase.from("resumes").delete().eq("user_id", user.id);
+    await supabase.from("ai_settings").delete().eq("user_id", user.id);
+    await supabase.from("profiles").delete().eq("id", user.id);
+
+    // Delete Storage files
+    const { data: files } = await supabase.storage
+      .from("resumes")
+      .list(user.id);
+    if (files && files.length > 0) {
+      await supabase.storage
+        .from("resumes")
+        .remove(files.map((f) => `${user.id}/${f.name}`));
+    }
+
+    // Delete the auth user (requires service role)
+    const admin = createAdminClient();
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+    if (deleteError) throw deleteError;
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
 
 export async function GET() {
   try {
