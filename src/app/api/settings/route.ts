@@ -59,11 +59,19 @@ export async function GET() {
       supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     ]);
 
-    // Mask the key for display
-    const apiKey = aiSettings?.anthropic_api_key_encrypted ? decrypt(aiSettings.anthropic_api_key_encrypted) : null;
+    const anthropicKey = aiSettings?.anthropic_api_key_encrypted ? decrypt(aiSettings.anthropic_api_key_encrypted) : null;
+    const groqKey = aiSettings?.groq_api_key_encrypted ? decrypt(aiSettings.groq_api_key_encrypted) : null;
 
     return NextResponse.json({
-      aiSettings: aiSettings ? { ...aiSettings, anthropic_api_key_encrypted: undefined, hasApiKey: !!apiKey, apiKeyMask: maskKey(apiKey) } : null,
+      aiSettings: aiSettings ? {
+        ...aiSettings,
+        anthropic_api_key_encrypted: undefined,
+        groq_api_key_encrypted: undefined,
+        hasAnthropicKey: !!anthropicKey,
+        anthropicKeyMask: maskKey(anthropicKey),
+        hasGroqKey: !!groqKey,
+        groqKeyMask: maskKey(groqKey),
+      } : null,
       profile,
     });
   } catch (err) {
@@ -78,17 +86,19 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-    // Handle API key separately (encrypt)
+    // Handle API keys separately (encrypt)
     if (body.anthropic_api_key !== undefined) {
-      if (body.anthropic_api_key === "" || body.anthropic_api_key === null) {
-        updates.anthropic_api_key_encrypted = null;
-      } else {
-        updates.anthropic_api_key_encrypted = encrypt(body.anthropic_api_key);
-      }
+      updates.anthropic_api_key_encrypted = body.anthropic_api_key
+        ? encrypt(body.anthropic_api_key) : null;
+    }
+    if (body.groq_api_key !== undefined) {
+      updates.groq_api_key_encrypted = body.groq_api_key
+        ? encrypt(body.groq_api_key) : null;
     }
 
     // Feature toggles
     const toggleKeys = [
+      "ai_provider",
       "match_scoring_enabled", "why_match_enabled", "job_summary_enabled",
       "skill_gap_enabled", "cover_letter_enabled", "interview_prep_enabled",
       "email_draft_enabled", "linkedin_analyzer_enabled", "market_pulse_enabled",

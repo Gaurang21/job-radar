@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import type {
   ParsedProfile,
   MatchResult,
@@ -12,42 +13,70 @@ import type {
   CoverLetterTone,
   EmailTone,
   AISettings,
+  AIProvider,
 } from "@/types";
 
 // ─── Configuration ────────────────────────────────────────────
 
 const STUB_MODE = process.env.AI_STUB_MODE === "true";
-const DEFAULT_MODEL = "claude-sonnet-4-6";
-const POWERFUL_MODEL = "claude-opus-4-7";
 
-/**
- * Build an Anthropic client for a given API key (per-user or env fallback).
- * Returns null if no key is available.
- */
-function buildClient(apiKey?: string | null): Anthropic | null {
+const ANTHROPIC_DEFAULT = "claude-sonnet-4-6";
+const ANTHROPIC_POWERFUL = "claude-opus-4-7";
+const GROQ_DEFAULT = "llama-3.3-70b-versatile";
+const GROQ_POWERFUL = "llama-3.3-70b-versatile";
+
+interface ServiceContext {
+  apiKey?: string | null;
+  provider?: AIProvider;
+  settings?: Partial<AISettings>;
+}
+
+// ─── Clients ──────────────────────────────────────────────────
+
+function buildAnthropicClient(apiKey?: string | null): Anthropic | null {
   const key = apiKey || process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   return new Anthropic({ apiKey: key });
 }
 
-interface ServiceContext {
-  apiKey?: string | null;
-  settings?: Partial<AISettings>;
+function buildGroqClient(apiKey?: string | null): Groq | null {
+  const key = apiKey || process.env.GROQ_API_KEY;
+  if (!key) return null;
+  return new Groq({ apiKey: key });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
+// ─── Unified AI call ──────────────────────────────────────────
 
-async function callClaude(
+async function callAI(
   ctx: ServiceContext,
   prompt: string,
-  options: { model?: string; maxTokens?: number } = {}
+  options: { tier?: "default" | "powerful"; maxTokens?: number } = {}
 ): Promise<string | null> {
   if (STUB_MODE) return null;
-  const client = buildClient(ctx.apiKey);
+  const provider = ctx.provider ?? "anthropic";
+  const tier = options.tier ?? "default";
+
+  if (provider === "groq") {
+    const client = buildGroqClient(ctx.apiKey);
+    if (!client) return null;
+    try {
+      const resp = await client.chat.completions.create({
+        model: tier === "powerful" ? GROQ_POWERFUL : GROQ_DEFAULT,
+        max_tokens: options.maxTokens ?? 1000,
+        messages: [{ role: "user", content: prompt }],
+      });
+      return resp.choices[0]?.message?.content ?? null;
+    } catch (err) {
+      console.error("Groq API error:", err);
+      return null;
+    }
+  }
+
+  const client = buildAnthropicClient(ctx.apiKey);
   if (!client) return null;
   try {
     const message = await client.messages.create({
-      model: options.model ?? DEFAULT_MODEL,
+      model: tier === "powerful" ? ANTHROPIC_POWERFUL : ANTHROPIC_DEFAULT,
       max_tokens: options.maxTokens ?? 1000,
       messages: [{ role: "user", content: prompt }],
     });
@@ -113,7 +142,7 @@ Return ONLY JSON:
 
 Scoring: 80-100=excellent, 50-79=good, 25-49=partial, 0-24=poor.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 600 });
+  const text = await callAI(ctx, prompt, { maxTokens: 600 });
   if (!text) return stubMatch(job, profile);
 
   const parsed = parseJsonResponse<{ score?: number; reasons?: string[]; whyMatch?: string }>(text, {});
@@ -161,7 +190,7 @@ TITLES: ${profile.titles.slice(0, 3).join(", ")}
 JOB: ${job.title}
 ${job.description.slice(0, 1500)}`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 500 });
+  const text = await callAI(ctx, prompt, { maxTokens: 500 });
   if (!text) return stubExplain();
 
   return parseJsonResponse(text, { matched: [], transferable: [], missing: [] });
@@ -193,7 +222,7 @@ Return ONLY JSON:
 JOB: ${job.title} at ${job.company}
 ${job.description.slice(0, 2500)}`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 600 });
+  const text = await callAI(ctx, prompt, { maxTokens: 600 });
   if (!text) return stubSummary();
 
   return parseJsonResponse<JobSummary>(text, stubSummary());
@@ -239,7 +268,7 @@ EXPERIENCE: ${profile.experienceYears}y in ${profile.titles[0] ?? "various roles
 JOB: ${job.title}
 ${job.description.slice(0, 1800)}`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 800 });
+  const text = await callAI(ctx, prompt, { maxTokens: 800 });
   if (!text) return stubGaps();
 
   return parseJsonResponse<SkillGapResult>(text, stubGaps());
@@ -294,7 +323,7 @@ Requirements:
 
 Return only the letter, no extras.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 1000, model: POWERFUL_MODEL });
+  const text = await callAI(ctx, prompt, { maxTokens: 1000, tier: "powerful" });
   if (!text) return stubCoverLetter(job, profile);
   return text.trim();
 }
@@ -346,7 +375,7 @@ ${job.description.slice(0, 1500)}
 CANDIDATE BACKGROUND:
 ${profileSummary(profile)}`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 2000 });
+  const text = await callAI(ctx, prompt, { maxTokens: 2000 });
   if (!text) return stubInterviewPrep();
 
   return parseJsonResponse<InterviewPrepResult>(text, stubInterviewPrep());
@@ -402,7 +431,7 @@ Requirements:
 
 Return only the email with subject line.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 700 });
+  const text = await callAI(ctx, prompt, { maxTokens: 700 });
   if (!text) return stubEmail(job, recipient, tone);
   return text.trim();
 }
@@ -454,7 +483,7 @@ ${experience.slice(0, 2000)}
 
 Score guide: 80-100 excellent, 60-79 good, 40-59 needs work, <40 significant gaps.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 1800 });
+  const text = await callAI(ctx, prompt, { maxTokens: 1800 });
   if (!text) return stubLinkedIn();
 
   return parseJsonResponse<LinkedInAnalysis>(text, stubLinkedIn());
@@ -526,7 +555,7 @@ Return ONLY JSON:
   "topCompanies": ["company1", "company2", "company3"]
 }`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 700 });
+  const text = await callAI(ctx, prompt, { maxTokens: 700 });
   if (!text) return stubMarketPulse(targetRole, topCompanies, avgSalary);
 
   const parsed = parseJsonResponse<Partial<MarketPulse>>(text, {});
@@ -594,7 +623,7 @@ Return ONLY JSON:
 
 Be specific and actionable.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 600 });
+  const text = await callAI(ctx, prompt, { maxTokens: 600 });
   const parsed = parseJsonResponse<{ patterns?: string[]; recommendations?: string[]; overallInsight?: string }>(text, {});
   return {
     patterns: parsed.patterns ?? [`Most rejections cluster at ${topSeniority?.[0] ?? "similar"} level roles`],
@@ -606,22 +635,42 @@ Be specific and actionable.`;
 
 // ─── Test Connection ──────────────────────────────────────────
 
-export async function testConnection(apiKey: string): Promise<{ ok: boolean; error?: string }> {
+export async function testConnection(
+  apiKey: string,
+  provider: AIProvider = "anthropic"
+): Promise<{ ok: boolean; error?: string }> {
+  if (provider === "groq") {
+    if (!apiKey || !apiKey.startsWith("gsk_")) {
+      return { ok: false, error: "Invalid Groq key (should start with 'gsk_')" };
+    }
+    if (STUB_MODE) return { ok: true };
+    const client = new Groq({ apiKey });
+    try {
+      await client.chat.completions.create({
+        model: GROQ_DEFAULT,
+        max_tokens: 10,
+        messages: [{ role: "user", content: "Reply with just 'ok'." }],
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+    }
+  }
+
   if (!apiKey || !apiKey.startsWith("sk-")) {
-    return { ok: false, error: "Invalid key format (should start with 'sk-')" };
+    return { ok: false, error: "Invalid Anthropic key (should start with 'sk-')" };
   }
   if (STUB_MODE) return { ok: true };
   const client = new Anthropic({ apiKey });
   try {
     await client.messages.create({
-      model: DEFAULT_MODEL,
+      model: ANTHROPIC_DEFAULT,
       max_tokens: 10,
       messages: [{ role: "user", content: "Reply with just 'ok'." }],
     });
     return { ok: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return { ok: false, error: message };
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
@@ -673,7 +722,7 @@ Resume:
 ${rawText.slice(0, 8000)}
 ---`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 1500, model: POWERFUL_MODEL });
+  const text = await callAI(ctx, prompt, { maxTokens: 1500, tier: "powerful" });
   if (!text) {
     // Stub fallback: very basic extraction
     return stubResumeParse(rawText);
@@ -767,7 +816,7 @@ Scoring guide:
 
 Be precise and realistic. Missing a required keyword should significantly hurt keywordScore.`;
 
-  const text = await callClaude(ctx, prompt, { maxTokens: 2000, model: POWERFUL_MODEL });
+  const text = await callAI(ctx, prompt, { maxTokens: 2000, tier: "powerful" });
   if (!text) return stubATSScore();
 
   return parseJsonResponse<ATSScore>(text, stubATSScore());

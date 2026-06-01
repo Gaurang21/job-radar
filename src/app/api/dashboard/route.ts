@@ -59,32 +59,28 @@ export async function GET() {
 
     // Check API status — these are env-level checks
     const messages: Array<{ service: string; message: string; severity: string }> = [];
-    if (!process.env.ANTHROPIC_API_KEY) {
-      // Check if user has their own key
+
+    const hasEnvAiKey = !!(process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY);
+    if (!hasEnvAiKey) {
       const { data: aiSettings } = await supabase
         .from("ai_settings")
-        .select("anthropic_api_key_encrypted")
+        .select("anthropic_api_key_encrypted, groq_api_key_encrypted")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (!aiSettings?.anthropic_api_key_encrypted) {
+      const hasUserKey = !!(aiSettings?.anthropic_api_key_encrypted || aiSettings?.groq_api_key_encrypted);
+      if (!hasUserKey) {
         messages.push({
-          service: "Anthropic",
-          message: "⚠️ AI features unavailable — add an Anthropic API key in Settings → AI to enable scoring, cover letters, and more.",
+          service: "AI",
+          message: "⚠️ AI features unavailable — add an Anthropic or Groq API key in Settings → AI.",
           severity: "warning",
         });
       }
     }
+
     if (!process.env.ADZUNA_APP_ID || !process.env.ADZUNA_APP_KEY) {
       messages.push({
         service: "Adzuna",
         message: "⚠️ Adzuna not configured — add ADZUNA_APP_ID and ADZUNA_APP_KEY to .env.",
-        severity: "warning",
-      });
-    }
-    if (!process.env.APIFY_API_TOKEN) {
-      messages.push({
-        service: "Apify",
-        message: "⚠️ Apify not configured — add APIFY_API_TOKEN to enable LinkedIn/Indeed scraping.",
         severity: "warning",
       });
     }

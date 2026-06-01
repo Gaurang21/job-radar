@@ -6,9 +6,10 @@ import {
 } from "lucide-react";
 import Spinner from "@/components/ui/Spinner";
 import toast from "react-hot-toast";
-import type { CoverLetterTone } from "@/types";
+import type { CoverLetterTone, AIProvider } from "@/types";
 
-interface AISettings {
+interface AISettingsData {
+  ai_provider: AIProvider;
   match_scoring_enabled: boolean;
   why_match_enabled: boolean;
   job_summary_enabled: boolean;
@@ -20,11 +21,13 @@ interface AISettings {
   market_pulse_enabled: boolean;
   rejection_analyzer_enabled: boolean;
   cover_letter_tone: CoverLetterTone;
-  hasApiKey: boolean;
-  apiKeyMask: string;
+  hasAnthropicKey: boolean;
+  anthropicKeyMask: string;
+  hasGroqKey: boolean;
+  groqKeyMask: string;
 }
 
-const FEATURE_TOGGLES: { key: keyof AISettings; label: string; description: string }[] = [
+const FEATURE_TOGGLES: { key: keyof AISettingsData; label: string; description: string }[] = [
   { key: "match_scoring_enabled", label: "Match Scoring", description: "Score jobs 0–100 based on your resume" },
   { key: "why_match_enabled", label: "Why You Match", description: "Explain why a job fits your profile" },
   { key: "job_summary_enabled", label: "Job Summary", description: "AI-powered 5-bullet summaries" },
@@ -37,21 +40,43 @@ const FEATURE_TOGGLES: { key: keyof AISettings; label: string; description: stri
   { key: "rejection_analyzer_enabled", label: "Rejection Analyzer", description: "Find patterns in rejections (5+ needed)" },
 ];
 
+const PROVIDERS: { id: AIProvider; label: string; badge: string; description: string; keyPrefix: string; keyPlaceholder: string; docsUrl: string }[] = [
+  {
+    id: "anthropic",
+    label: "Anthropic Claude",
+    badge: "Best quality",
+    description: "Claude Sonnet & Opus. Pay-per-use — very affordable for personal use.",
+    keyPrefix: "sk-ant-",
+    keyPlaceholder: "sk-ant-…",
+    docsUrl: "https://console.anthropic.com",
+  },
+  {
+    id: "groq",
+    label: "Groq (Free)",
+    badge: "Free tier",
+    description: "Llama 3.3 70B via Groq's ultra-fast inference. Generous free tier.",
+    keyPrefix: "gsk_",
+    keyPlaceholder: "gsk_…",
+    docsUrl: "https://console.groq.com",
+  },
+];
+
 export default function AISettingsPage() {
-  const [settings, setSettings] = useState<AISettings | null>(null);
+  const [settings, setSettings] = useState<AISettingsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [testError, setTestError] = useState<string | null>(null);
-  const [localSettings, setLocalSettings] = useState<Partial<AISettings>>({});
+  const [localSettings, setLocalSettings] = useState<Partial<AISettingsData>>({});
 
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
         setSettings(d.aiSettings ?? {
+          ai_provider: "anthropic",
           match_scoring_enabled: true,
           why_match_enabled: true,
           job_summary_enabled: true,
@@ -63,22 +88,30 @@ export default function AISettingsPage() {
           market_pulse_enabled: true,
           rejection_analyzer_enabled: true,
           cover_letter_tone: "formal",
-          hasApiKey: false,
-          apiKeyMask: "",
+          hasAnthropicKey: false,
+          anthropicKeyMask: "",
+          hasGroqKey: false,
+          groqKeyMask: "",
         });
       })
       .finally(() => setIsLoading(false));
   }, []);
 
-  const mergedSettings: AISettings | null = settings
-    ? { ...settings, ...localSettings } as AISettings
-    : null;
+  const merged: AISettingsData | null = settings ? { ...settings, ...localSettings } as AISettingsData : null;
+  const activeProvider: AIProvider = merged?.ai_provider ?? "anthropic";
+  const activeMeta = PROVIDERS.find((p) => p.id === activeProvider)!;
+  const hasActiveKey = activeProvider === "groq" ? merged?.hasGroqKey : merged?.hasAnthropicKey;
+  const activeKeyMask = activeProvider === "groq" ? merged?.groqKeyMask : merged?.anthropicKeyMask;
 
-  const toggleFeature = (key: keyof AISettings) => {
-    setLocalSettings((prev) => ({
-      ...prev,
-      [key]: !(prev[key] ?? settings?.[key]),
-    }));
+  const toggleFeature = (key: keyof AISettingsData) => {
+    setLocalSettings((prev) => ({ ...prev, [key]: !(prev[key] ?? settings?.[key]) }));
+  };
+
+  const selectProvider = (provider: AIProvider) => {
+    setLocalSettings((prev) => ({ ...prev, ai_provider: provider }));
+    setApiKey("");
+    setTestStatus("idle");
+    setTestError(null);
   };
 
   const handleTestConnection = async () => {
@@ -88,7 +121,7 @@ export default function AISettingsPage() {
       const res = await fetch("/api/ai/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey || undefined }),
+        body: JSON.stringify({ apiKey: apiKey || undefined, provider: activeProvider }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -108,7 +141,10 @@ export default function AISettingsPage() {
     setIsSaving(true);
     try {
       const body: Record<string, unknown> = { ...localSettings };
-      if (apiKey !== "") body.anthropic_api_key = apiKey;
+      if (apiKey !== "") {
+        if (activeProvider === "groq") body.groq_api_key = apiKey;
+        else body.anthropic_api_key = apiKey;
+      }
 
       const res = await fetch("/api/settings", {
         method: "PATCH",
@@ -122,7 +158,6 @@ export default function AISettingsPage() {
         return;
       }
 
-      // Refresh settings
       const refreshed = await fetch("/api/settings").then((r) => r.json());
       setSettings(refreshed.aiSettings);
       setLocalSettings({});
@@ -154,9 +189,7 @@ export default function AISettingsPage() {
             <Sparkles className="h-6 w-6 text-signal-violet" />
             AI Settings
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Configure your Anthropic API key and toggle AI features
-          </p>
+          <p className="mt-1 text-sm text-gray-500">Choose your AI provider and configure features</p>
         </div>
         {hasChanges && (
           <button
@@ -171,24 +204,57 @@ export default function AISettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Provider Selector */}
+        <div className="glass-card p-6">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">AI Provider</h2>
+          <p className="mb-4 text-xs text-gray-500">Choose which AI powers your features</p>
+          <div className="grid grid-cols-2 gap-3">
+            {PROVIDERS.map((p) => {
+              const active = activeProvider === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => selectProvider(p.id)}
+                  className={`rounded-xl border p-4 text-left transition-all ${
+                    active
+                      ? "border-signal-cyan/40 bg-signal-cyan/5 ring-1 ring-signal-cyan/20"
+                      : "border-white/[0.08] bg-signal-surface hover:bg-signal-card-hover"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-gray-100">{p.label}</span>
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                      p.id === "groq"
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-signal-violet/15 text-signal-violet"
+                    }`}>
+                      {p.badge}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">{p.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* API Key */}
         <div className="glass-card p-6">
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">
-            Anthropic API Key
+            {activeMeta.label} API Key
           </h2>
           <p className="mb-4 text-xs text-gray-500">
-            Your key is stored encrypted (AES-256-GCM). It&apos;s used for all AI features.
-            Get one at{" "}
-            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" className="text-signal-cyan hover:underline">
-              console.anthropic.com
+            Stored encrypted (AES-256-GCM). Get your key at{" "}
+            <a href={activeMeta.docsUrl} target="_blank" rel="noreferrer" className="text-signal-cyan hover:underline">
+              {activeMeta.docsUrl.replace("https://", "")}
             </a>
           </p>
 
-          {mergedSettings?.hasApiKey && (
+          {hasActiveKey && (
             <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
               <CheckCircle className="h-4 w-4 text-emerald-400 flex-shrink-0" />
               <span className="text-xs text-emerald-300">
-                API key saved: <code className="font-mono">{mergedSettings.apiKeyMask}</code>
+                Key saved: <code className="font-mono">{activeKeyMask}</code>
               </span>
             </div>
           )}
@@ -198,8 +264,8 @@ export default function AISettingsPage() {
               <input
                 type={showKey ? "text" : "password"}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={mergedSettings?.hasApiKey ? "Enter new key to replace…" : "sk-ant-…"}
+                onChange={(e) => { setApiKey(e.target.value); setTestStatus("idle"); }}
+                placeholder={hasActiveKey ? "Enter new key to replace…" : activeMeta.keyPlaceholder}
                 className="w-full rounded-lg border border-white/[0.08] bg-signal-bg/50 px-3 py-2.5 pr-10 text-sm text-gray-200 placeholder-gray-600 focus:border-signal-cyan/40 focus:outline-none font-mono"
               />
               <button
@@ -212,7 +278,7 @@ export default function AISettingsPage() {
             </div>
             <button
               onClick={handleTestConnection}
-              disabled={testStatus === "testing"}
+              disabled={testStatus === "testing" || (!apiKey && !hasActiveKey)}
               className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-signal-surface px-4 py-2.5 text-sm text-gray-300 hover:bg-signal-card-hover transition-all disabled:opacity-50"
             >
               {testStatus === "testing" ? (
@@ -226,32 +292,17 @@ export default function AISettingsPage() {
             </button>
           </div>
 
-          {testStatus === "ok" && (
-            <p className="mt-2 text-xs text-emerald-400">✓ Connection successful</p>
-          )}
-          {testStatus === "fail" && testError && (
-            <p className="mt-2 text-xs text-red-400">✗ {testError}</p>
-          )}
-
-          {(mergedSettings?.hasApiKey || apiKey) && (
-            <button
-              onClick={() => setApiKey("")}
-              className="mt-3 text-xs text-gray-600 hover:text-red-400 transition-colors"
-            >
-              Clear / remove API key
-            </button>
-          )}
+          {testStatus === "ok" && <p className="mt-2 text-xs text-emerald-400">✓ Connection successful</p>}
+          {testStatus === "fail" && testError && <p className="mt-2 text-xs text-red-400">✗ {testError}</p>}
         </div>
 
         {/* Cover Letter Tone */}
         <div className="glass-card p-6">
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">
-            Cover Letter Tone
-          </h2>
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">Cover Letter Tone</h2>
           <p className="mb-4 text-xs text-gray-500">Default tone for all generated cover letters</p>
           <div className="flex gap-2">
             {(["formal", "friendly", "concise"] as CoverLetterTone[]).map((tone) => {
-              const active = (mergedSettings?.cover_letter_tone ?? "formal") === tone;
+              const active = (merged?.cover_letter_tone ?? "formal") === tone;
               return (
                 <button
                   key={tone}
@@ -271,30 +322,21 @@ export default function AISettingsPage() {
 
         {/* Feature Toggles */}
         <div className="glass-card p-6">
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">
-            AI Features
-          </h2>
-          <p className="mb-4 text-xs text-gray-500">
-            Disable features you don&apos;t need to reduce API usage
-          </p>
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-gray-300">AI Features</h2>
+          <p className="mb-4 text-xs text-gray-500">Disable features you don&apos;t need to reduce API usage</p>
           <div className="divide-y divide-white/[0.04]">
             {FEATURE_TOGGLES.map((feat) => {
-              const enabled = mergedSettings ? !!(mergedSettings[feat.key] ?? true) : true;
+              const enabled = merged ? !!(merged[feat.key] ?? true) : true;
               return (
                 <div key={feat.key} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-gray-200">{feat.label}</p>
                     <p className="text-xs text-gray-500">{feat.description}</p>
                   </div>
-                  <button
-                    onClick={() => toggleFeature(feat.key as keyof AISettings)}
-                    className="ml-4 flex-shrink-0"
-                  >
-                    {enabled ? (
-                      <ToggleRight className="h-6 w-6 text-signal-cyan" />
-                    ) : (
-                      <ToggleLeft className="h-6 w-6 text-gray-600" />
-                    )}
+                  <button onClick={() => toggleFeature(feat.key as keyof AISettingsData)} className="ml-4 flex-shrink-0">
+                    {enabled
+                      ? <ToggleRight className="h-6 w-6 text-signal-cyan" />
+                      : <ToggleLeft className="h-6 w-6 text-gray-600" />}
                   </button>
                 </div>
               );
@@ -302,7 +344,6 @@ export default function AISettingsPage() {
           </div>
         </div>
 
-        {/* Save button at bottom */}
         {hasChanges && (
           <div className="flex justify-end">
             <button

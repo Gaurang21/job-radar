@@ -139,9 +139,13 @@ export interface Notification {
 
 // ─── AI Settings ──────────────────────────────────────────────
 
+export type AIProvider = "anthropic" | "groq";
+
 export interface AISettings {
   user_id: string;
+  ai_provider: AIProvider;
   anthropic_api_key_encrypted: string | null;
+  groq_api_key_encrypted: string | null;
   match_scoring_enabled: boolean;
   why_match_enabled: boolean;
   job_summary_enabled: boolean;

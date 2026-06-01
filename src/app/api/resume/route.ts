@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
     // Resolve AI context (per-user key or env)
     const ctx = await resolveAIContext(supabase, user.id);
 
-    // Parse via Claude
-    const parsed = await parseResume(buffer, mimeType, { apiKey: ctx.apiKey });
+    // Parse via AI (provider + key from user settings or env fallback)
+    const parsed = await parseResume(buffer, mimeType, ctx);
 
     // Upload file to Supabase Storage
     const filePath = `${user.id}/resume-${Date.now()}.${file.name.split(".").pop()}`;
