@@ -18,7 +18,6 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/dashboard";
   const errorCode = searchParams.get("error");
-  const supabase = createClient();
 
   useEffect(() => {
     if (errorCode && AUTH_ERRORS[errorCode]) {
@@ -33,6 +32,7 @@ function LoginForm() {
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading("email");
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       toast.error(error.message);
@@ -46,6 +46,7 @@ function LoginForm() {
 
   const handleOAuth = async (provider: "google" | "github") => {
     setLoading(provider);
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },

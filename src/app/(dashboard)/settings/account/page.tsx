@@ -14,7 +14,6 @@ interface AccountData {
 
 export default function AccountSettingsPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -28,6 +27,7 @@ export default function AccountSettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   useEffect(() => {
+    const supabase = createClient();
     Promise.all([
       fetch("/api/settings").then((r) => r.json()),
       supabase.auth.getUser(),
@@ -81,6 +81,7 @@ export default function AccountSettingsPage() {
     }
     setIsChangingPassword(true);
     try {
+      const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
         toast.error(error.message);
@@ -105,7 +106,7 @@ export default function AccountSettingsPage() {
         setIsDeletingAccount(false);
         return;
       }
-      await supabase.auth.signOut();
+      await createClient().auth.signOut();
       toast.success("Account deleted. Goodbye!");
       router.push("/");
     } catch {

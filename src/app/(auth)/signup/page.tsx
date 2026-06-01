@@ -9,7 +9,6 @@ import toast from "react-hot-toast";
 
 export default function SignupPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -23,6 +22,7 @@ export default function SignupPage() {
       return;
     }
     setLoading("email");
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -49,6 +49,7 @@ export default function SignupPage() {
 
   const handleOAuth = async (provider: "google" | "github") => {
     setLoading(provider);
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}/auth/callback` },

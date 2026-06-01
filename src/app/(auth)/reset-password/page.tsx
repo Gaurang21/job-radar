@@ -15,18 +15,17 @@ function ResetPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
-    // Supabase puts the access_token in the URL fragment (#access_token=...)
-    // The client SDK handles the session exchange automatically on mount
+    // createClient() is safe here — effects only run in the browser
+    const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setSessionReady(true);
       }
     });
     return () => subscription.unsubscribe();
-  }, [supabase]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +38,7 @@ function ResetPasswordForm() {
       return;
     }
     setLoading(true);
+    const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) {
