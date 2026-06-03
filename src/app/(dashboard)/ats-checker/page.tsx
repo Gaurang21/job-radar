@@ -130,7 +130,7 @@ export default function ATSCheckerPage() {
     setOpenSection((prev) => (prev === section ? null : section));
 
   return (
-    <main className="mx-auto max-w-5xl px-4 pb-16 pt-24 md:px-6">
+    <main className="w-full px-4 pb-16 pt-24 md:px-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-100">
