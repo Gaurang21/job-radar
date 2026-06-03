@@ -101,7 +101,7 @@ export default function DashboardPage() {
   const statCards = [
     { label: "Jobs Found", value: stats?.totalJobs ?? 0, icon: Briefcase, color: "text-signal-cyan" },
     { label: "Avg Match Score", value: `${stats?.avgMatchScore ?? 0}%`, icon: TrendingUp, color: "text-signal-violet" },
-    { label: "Applied", value: stats?.applied ?? 0, icon: Send, color: "text-blue-400" },
+    { label: "Applied", value: stats?.applied ?? 0, icon: Send, color: "text-signal-cyan" },
     { label: "Interviews", value: stats?.interviews ?? 0, icon: MessageSquare, color: "text-amber-400" },
     { label: "Offers", value: stats?.offers ?? 0, icon: Trophy, color: "text-emerald-400" },
     { label: "Rejected", value: stats?.rejected ?? 0, icon: XCircle, color: "text-red-400" },
@@ -111,8 +111,10 @@ export default function DashboardPage() {
     <main className="mx-auto max-w-7xl px-4 pb-16 pt-24 md:px-6">
       {/* Welcome header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-100">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-3xl font-bold text-white">
+          Dashboard<span className="text-signal-cyan">.</span>
+        </h1>
+        <p className="mt-1 text-sm text-gray-400">
           {stats?.newSinceLastVisit
             ? `${stats.newSinceLastVisit} new jobs since your last visit`
             : stats?.lastFetch
@@ -190,14 +192,14 @@ export default function DashboardPage() {
       )}
 
       {/* Stat cards */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.label} className="glass-card p-4 text-center">
-              <Icon className={`mx-auto mb-2 h-5 w-5 ${card.color}`} />
-              <p className="text-xl font-bold text-gray-100">{card.value}</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">{card.label}</p>
+            <div key={card.label} className="rounded-2xl bg-gradient-to-br from-signal-surface to-signal-card border border-white/[0.06] p-4">
+              <Icon className={`h-4 w-4 ${card.color} mb-3`} />
+              <p className="text-2xl font-bold text-white">{card.value}</p>
+              <p className="text-xs text-gray-500 mt-1">{card.label}</p>
             </div>
           );
         })}
@@ -373,7 +375,7 @@ export default function DashboardPage() {
         {[
           { href: "/jobs", label: "Browse Jobs", icon: Briefcase, color: "text-signal-cyan" },
           { href: "/pipeline", label: "My Pipeline", icon: Send, color: "text-signal-violet" },
-          { href: "/profile", label: "My Profile", icon: TrendingUp, color: "text-blue-400" },
+          { href: "/profile", label: "My Profile", icon: TrendingUp, color: "text-signal-cyan" },
           { href: "/settings/ai", label: "AI Settings", icon: Sparkles, color: "text-emerald-400" },
         ].map((item) => {
           const Icon = item.icon;

@@ -139,8 +139,8 @@ export default function ProfilePage() {
       ) : (
         <div className="space-y-6">
           {/* Basic Info */}
-          <div className="glass-card p-6">
-            <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Basic Info</h2>
+          <div className="glass-card p-6 border-t-2 border-signal-cyan/30">
+            <h2 className="text-signal-cyan text-xs uppercase tracking-widest font-semibold mb-4">Basic Info</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5">Desired Role</label>
@@ -185,8 +185,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Skills */}
-          <div className="glass-card p-6">
-            <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Skills</h2>
+          <div className="glass-card p-6 border-t-2 border-signal-cyan/30">
+            <h2 className="text-signal-cyan text-xs uppercase tracking-widest font-semibold mb-4">Skills</h2>
             <div className="flex flex-wrap gap-2 mb-4">
               {form.skills.map((skill) => (
                 <span
@@ -219,8 +219,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Job Titles */}
-          <div className="glass-card p-6">
-            <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Past Job Titles</h2>
+          <div className="glass-card p-6 border-t-2 border-signal-cyan/30">
+            <h2 className="text-signal-cyan text-xs uppercase tracking-widest font-semibold mb-4">Past Job Titles</h2>
             <div className="flex flex-wrap gap-2 mb-4">
               {form.titles.map((title) => (
                 <span
@@ -253,8 +253,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Re-upload */}
-          <div className="glass-card p-6">
-            <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Update Resume</h2>
+          <div className="glass-card p-6 border-t-2 border-signal-cyan/30">
+            <h2 className="text-signal-cyan text-xs uppercase tracking-widest font-semibold mb-4">Update Resume</h2>
             <p className="text-xs text-gray-500 mb-4">
               Upload a new resume to replace your current profile. All jobs will be re-fetched and re-scored.
             </p>

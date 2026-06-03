@@ -62,7 +62,7 @@ function LoginForm() {
       {/* Logo */}
       <div className="mb-10 flex items-center justify-center gap-3">
         <div className="radar-icon h-10 w-10 rounded-full bg-signal-surface flex items-center justify-center">
-          <div className="h-3 w-3 rounded-full bg-signal-cyan shadow-[0_0_12px_rgba(6,182,212,0.9)]" />
+          <div className="h-3 w-3 rounded-full bg-signal-cyan shadow-[0_0_12px_rgba(13,148,136,0.9)]" />
         </div>
         <span className="text-2xl font-bold gradient-text">JobRadar</span>
       </div>
@@ -145,7 +145,7 @@ function LoginForm() {
       </div>
 
       <p className="mt-6 text-center text-sm text-gray-500">
-        Don't have an account?{" "}
+        Don&apos;t have an account?{" "}
         <Link href="/signup" className="text-signal-cyan hover:underline">
           Sign up
         </Link>
@@ -156,10 +156,29 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-signal-bg bg-signal-gradient bg-grid p-4">
-      <Suspense fallback={<div className="text-gray-500">Loading…</div>}>
-        <LoginForm />
-      </Suspense>
+    <div className="min-h-screen flex bg-signal-bg">
+      {/* Left accent panel */}
+      <div className="hidden lg:flex lg:w-2/5 bg-gradient-to-br from-signal-surface to-signal-card flex-col justify-center px-12 border-r border-signal-cyan/10">
+        <div className="radar-icon h-12 w-12 rounded-xl bg-signal-cyan/10 flex items-center justify-center mb-6">
+          <div className="h-4 w-4 rounded-full bg-signal-cyan shadow-[0_0_12px_rgba(13,148,136,0.9)]" />
+        </div>
+        <h2 className="text-3xl font-bold text-white mb-3">Find your next role</h2>
+        <p className="text-slate-400 text-sm leading-relaxed">AI-powered job matching that understands your career goals and surfaces the opportunities that matter.</p>
+        <div className="mt-8 space-y-3">
+          {["AI match scoring for every job","Track applications in one pipeline","Cover letters in seconds"].map(f => (
+            <div key={f} className="flex items-center gap-2 text-sm text-slate-300">
+              <div className="h-1.5 w-1.5 rounded-full bg-signal-cyan" />
+              {f}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Right form panel */}
+      <div className="flex flex-1 items-center justify-center p-8">
+        <Suspense fallback={<div className="text-slate-500">Loading…</div>}>
+          <LoginForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

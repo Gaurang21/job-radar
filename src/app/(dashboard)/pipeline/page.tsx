@@ -33,7 +33,7 @@ export default function PipelinePage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-100 flex items-center gap-2">
-            <KanbanSquare className="h-6 w-6 text-signal-violet" />
+            <KanbanSquare className="h-6 w-6 text-signal-cyan" />
             My Pipeline
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -67,7 +67,7 @@ export default function PipelinePage() {
           <div
             key={stage.label}
             title={stage.hint}
-            className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-signal-surface/50 px-2.5 py-1.5 text-xs text-gray-500 cursor-default"
+            className="flex items-center gap-1.5 rounded-lg border border-signal-cyan/15 bg-signal-surface/50 px-2.5 py-1.5 text-xs text-gray-500 cursor-default"
           >
             <span>{stage.emoji}</span>
             <span>{stage.label}</span>
