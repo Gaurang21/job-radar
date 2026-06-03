@@ -95,18 +95,18 @@ export default function Navbar({ user, profile }: Props) {
 
   return (
     <nav className="sticky top-0 z-50 h-16 border-b border-signal-cyan/10 bg-signal-bg/90 backdrop-blur-xl">
-      <div className="flex h-full w-full items-center gap-6 px-4 md:px-8">
+      <div className="flex h-full w-full items-center justify-between px-4 md:px-8">
 
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0">
+        <Link href="/dashboard" className="flex items-center gap-3 group">
           <div className="radar-icon h-8 w-8 rounded-full bg-signal-surface flex items-center justify-center">
             <div className="h-3 w-3 rounded-full bg-signal-cyan shadow-[0_0_8px_rgba(13,148,136,0.8)]" />
           </div>
           <span className="font-bold text-lg gradient-text hidden sm:block">JobRadar</span>
         </Link>
 
-        {/* Nav links — left-anchored, pill style on active */}
-        <div className="hidden md:flex items-center gap-1 flex-1">
+        {/* Center nav links in a floating pill */}
+        <div className="hidden md:flex items-center bg-signal-surface/60 backdrop-blur-sm rounded-full px-2 py-1 border border-white/[0.06]">
           {navLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
@@ -128,7 +128,7 @@ export default function Navbar({ user, profile }: Props) {
         </div>
 
         {/* Mobile nav links (icon-only) */}
-        <div className="flex md:hidden items-center gap-0.5 flex-1">
+        <div className="flex md:hidden items-center gap-0.5">
           {navLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
