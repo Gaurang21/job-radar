@@ -69,7 +69,7 @@ export default function JobsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-16 pt-24 md:px-6">
+    <main className="w-full px-4 pb-16 pt-24 md:px-8">
       {/* ── Header ── */}
       <div className="mb-6 flex items-center justify-between">
         <div>

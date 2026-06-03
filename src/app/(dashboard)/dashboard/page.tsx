@@ -108,7 +108,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-16 pt-24 md:px-6">
+    <main className="w-full px-4 pb-16 pt-24 md:px-8">
       {/* Welcome header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white">

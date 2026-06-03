@@ -95,7 +95,7 @@ export default function Navbar({ user, profile }: Props) {
 
   return (
     <nav className="sticky top-0 z-50 h-16 border-b border-signal-cyan/10 bg-signal-bg/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 md:px-6">
+      <div className="flex h-full w-full items-center justify-between px-4 md:px-8">
 
         {/* Logo */}
         <Link href="/dashboard" className="flex items-center gap-3 group">

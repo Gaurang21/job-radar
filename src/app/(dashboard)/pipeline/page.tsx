@@ -28,7 +28,7 @@ export default function PipelinePage() {
   };
 
   return (
-    <main className="mx-auto max-w-[1600px] px-4 pb-16 pt-24 md:px-6">
+    <main className="w-full px-4 pb-16 pt-24 md:px-8">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
