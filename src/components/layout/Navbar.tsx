@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard, Briefcase, KanbanSquare, User as UserIcon,
   Bell, RefreshCw, Settings, LogOut, ChevronDown, Sparkles, Linkedin, FileText,
-  Crosshair,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -95,19 +94,19 @@ export default function Navbar({ user, profile }: Props) {
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <nav className="sticky top-[2px] z-50 h-14 bg-signal-surface border-b border-signal-cyan/15">
+    <nav className="sticky top-0 z-50 h-16 border-b border-signal-cyan/10 bg-signal-bg/90 backdrop-blur-xl">
       <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 md:px-6">
 
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 group flex-shrink-0">
-          <div className="h-8 w-8 rounded-lg bg-signal-cyan/10 border border-signal-cyan/20 flex items-center justify-center">
-            <Crosshair className="h-4 w-4 text-signal-cyan" />
+        <Link href="/dashboard" className="flex items-center gap-3 group">
+          <div className="radar-icon h-8 w-8 rounded-full bg-signal-surface flex items-center justify-center">
+            <div className="h-3 w-3 rounded-full bg-signal-cyan shadow-[0_0_8px_rgba(13,148,136,0.8)]" />
           </div>
-          <span className="font-bold text-base text-signal-cyan hidden sm:block tracking-tight">JobRadar</span>
+          <span className="font-bold text-lg gradient-text hidden sm:block">JobRadar</span>
         </Link>
 
-        {/* Nav links — solid pill on active */}
-        <div className="flex items-center gap-0.5">
+        {/* Center nav links in a floating pill */}
+        <div className="hidden md:flex items-center bg-signal-surface/60 backdrop-blur-sm rounded-full px-2 py-1 border border-white/[0.06]">
           {navLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
@@ -115,50 +114,74 @@ export default function Navbar({ user, profile }: Props) {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                  "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all",
                   active
-                    ? "bg-signal-cyan/15 text-signal-cyan"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.05]"
+                    ? "bg-signal-cyan/10 text-signal-cyan"
+                    : "text-gray-400 hover:text-gray-100"
                 )}
               >
-                <Icon className="h-4 w-4" />
-                <span className="hidden md:block">{label}</span>
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
               </Link>
             );
           })}
         </div>
 
-        {/* Right controls */}
-        <div className="flex items-center gap-2">
-          {/* Refresh button — filled teal CTA */}
+        {/* Mobile nav links (icon-only) */}
+        <div className="flex md:hidden items-center gap-0.5">
+          {navLinks.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-label={label}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full transition-all",
+                  active
+                    ? "bg-signal-cyan/10 text-signal-cyan"
+                    : "text-gray-400 hover:text-gray-100"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Right side actions */}
+        <div className="flex items-center gap-1.5">
+
+          {/* Refresh button — icon only with teal border */}
           <button
             onClick={handleRefreshJobs}
             disabled={isFetchingJobs}
+            aria-label="Refresh jobs"
             className={cn(
-              "flex items-center gap-2 rounded-md bg-signal-cyan px-3 py-1.5 text-sm font-semibold text-signal-bg transition-all hover:bg-signal-cyan/90 active:scale-95",
-              isFetchingJobs && "opacity-60 cursor-not-allowed"
+              "flex h-9 w-9 items-center justify-center rounded-full border border-signal-cyan/30 text-signal-cyan transition-all hover:bg-signal-cyan/10 hover:shadow-[0_0_12px_rgba(13,148,136,0.3)]",
+              isFetchingJobs && "opacity-50 cursor-not-allowed"
             )}
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isFetchingJobs && "animate-spin")} />
-            <span className="hidden sm:block">Refresh</span>
+            <RefreshCw className={cn("h-4 w-4", isFetchingJobs && "animate-spin")} />
           </button>
 
           {/* Notifications */}
           <div className="relative" data-menu>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative flex h-8 w-8 items-center justify-center rounded-md border border-white/[0.08] bg-signal-card text-slate-400 hover:text-signal-cyan hover:border-signal-cyan/30 transition-all"
+              aria-label="Notifications"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-all"
             >
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-signal-cyan text-[10px] font-bold text-signal-bg">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-signal-cyan text-[10px] font-bold text-signal-bg">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-white/[0.08] bg-signal-surface shadow-signal-lg animate-fade-in">
+              <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-white/[0.08] bg-signal-surface shadow-signal-lg animate-fade-in">
                 <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
                   <span className="text-sm font-semibold text-gray-200">Notifications</span>
                   {unreadCount > 0 && (
@@ -172,13 +195,7 @@ export default function Navbar({ user, profile }: Props) {
                     <div className="px-4 py-8 text-center text-sm text-gray-500">No notifications yet</div>
                   ) : (
                     notifications.slice(0, 10).map((n) => (
-                      <div
-                        key={n.id}
-                        className={cn(
-                          "flex gap-3 border-b border-white/[0.04] px-4 py-3 last:border-0",
-                          !n.read && "bg-signal-cyan/5"
-                        )}
-                      >
+                      <div key={n.id} className={cn("flex gap-3 border-b border-white/[0.04] px-4 py-3 last:border-0", !n.read && "bg-signal-cyan/5")}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-200">{n.title}</p>
                           <p className="mt-0.5 text-xs text-gray-500 truncate">{n.message}</p>
@@ -196,12 +213,12 @@ export default function Navbar({ user, profile }: Props) {
           <div className="relative" data-menu>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="flex items-center gap-2 rounded-md border border-white/[0.08] bg-signal-card px-2 py-1.5 hover:border-signal-cyan/30 transition-all"
+              className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-signal-surface/80 px-2 py-1.5 hover:border-signal-cyan/20 hover:bg-signal-surface transition-all"
             >
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" className="h-6 w-6 rounded-full" />
               ) : (
-                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-signal-cyan/30 to-signal-violet/30 flex items-center justify-center text-[10px] font-bold text-gray-200">
+                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-signal-cyan to-signal-violet flex items-center justify-center text-[10px] font-bold text-white">
                   {initials}
                 </div>
               )}
@@ -209,7 +226,7 @@ export default function Navbar({ user, profile }: Props) {
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/[0.08] bg-signal-surface shadow-signal-lg animate-fade-in">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-white/[0.08] bg-signal-surface shadow-signal-lg animate-fade-in">
                 <div className="border-b border-white/[0.06] px-4 py-3">
                   <p className="text-sm font-medium text-gray-200 truncate">{displayName}</p>
                   <p className="text-xs text-gray-500 truncate">{user.email}</p>
@@ -224,7 +241,7 @@ export default function Navbar({ user, profile }: Props) {
                       key={href}
                       href={href}
                       onClick={() => setShowMenu(false)}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]"
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/[0.05] transition-all"
                     >
                       <Icon className="h-4 w-4" />
                       {label}
@@ -234,7 +251,7 @@ export default function Navbar({ user, profile }: Props) {
                 <div className="border-t border-white/[0.06] p-1">
                   <button
                     onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
+                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-all"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign out
