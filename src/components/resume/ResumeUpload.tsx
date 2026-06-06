@@ -50,6 +50,8 @@ export default function ResumeUpload({ onSuccess, compact = false }: Props) {
           if (fetchData.success) {
             toast.success(`Found ${fetchData.jobsFound} jobs`);
             window.dispatchEvent(new CustomEvent("jobs-refreshed"));
+          } else {
+            toast.error(fetchData.error || "Job fetch failed — try Refresh manually");
           }
         } finally {
           setIsFetchingJobs(false);
