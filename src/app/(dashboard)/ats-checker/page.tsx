@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import {
   FileText, ClipboardList, Sparkles, Loader2,
   CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp,
-  RotateCcw, Copy,
+  RotateCcw, Copy, Upload,
 } from "lucide-react";
 import Spinner from "@/components/ui/Spinner";
 import { useProfile } from "@/hooks/useProfile";
+import ResumeUpload from "@/components/resume/ResumeUpload";
 import type { ATSScore } from "@/types";
 import toast from "react-hot-toast";
 
-type ResumeMode = "stored" | "paste";
+type ResumeMode = "stored" | "paste" | "upload";
 
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? "text-emerald-400" : s >= 60 ? "text-amber-400" : "text-red-400";
@@ -151,23 +152,26 @@ export default function ATSCheckerPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-300">
                 Your Resume
               </h2>
-              {profile && (
-                <div className="flex gap-1 rounded-lg border border-white/[0.08] p-1">
-                  {(["stored", "paste"] as ResumeMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setResumeMode(mode)}
-                      className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                        resumeMode === mode
-                          ? "bg-signal-cyan text-signal-bg"
-                          : "text-gray-400 hover:text-gray-200"
-                      }`}
-                    >
-                      {mode === "stored" ? "Use saved" : "Paste new"}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-1 rounded-lg border border-white/[0.08] p-1">
+                {([
+                  { id: "stored", label: "Use saved" },
+                  { id: "paste",  label: "Paste" },
+                  { id: "upload", label: "Upload" },
+                ] as { id: ResumeMode; label: string }[]).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setResumeMode(id)}
+                    disabled={id === "stored" && !profile}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                      resumeMode === id
+                        ? "bg-signal-cyan text-signal-bg"
+                        : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {isLoadingProfile ? (
@@ -195,6 +199,11 @@ export default function ATSCheckerPage() {
                   {profile.experienceYears} years exp · {profile.titles[0] ?? "Engineer"}
                 </p>
               </div>
+            ) : resumeMode === "upload" ? (
+              <ResumeUpload
+                compact
+                onSuccess={() => setResumeMode("stored")}
+              />
             ) : (
               <textarea
                 value={pastedResume}

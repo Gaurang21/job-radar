@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Target } from "lucide-react";
+import { Target, Upload } from "lucide-react";
 import RadarView from "@/components/jobs/RadarView";
+import ResumeUpload from "@/components/resume/ResumeUpload";
 import JobDrawer from "@/components/jobs/JobDrawer";
 import CoverLetterModal from "@/components/cover-letter/CoverLetterModal";
 import InterviewPrepModal from "@/components/ai/InterviewPrepModal";
@@ -17,6 +18,7 @@ export default function JobsPage() {
     selectedJobId, setSelectedJobId,
   } = useAppStore();
 
+  const [showUpload, setShowUpload] = useState(false);
   const [coverLetterJob, setCoverLetterJob] = useState<Job | null>(null);
   const [interviewPrepJob, setInterviewPrepJob] = useState<Job | null>(null);
   const [emailDraftJob, setEmailDraftJob] = useState<Job | null>(null);
@@ -83,7 +85,21 @@ export default function JobsPage() {
               : "Fetch jobs to populate your radar"}
           </p>
         </div>
+        <button
+          onClick={() => setShowUpload((v) => !v)}
+          className="flex items-center gap-2 rounded-lg border border-signal-cyan/30 px-4 py-2 text-sm font-medium text-signal-cyan hover:bg-signal-cyan/10 transition-all"
+        >
+          <Upload className="h-4 w-4" />
+          {showUpload ? "Cancel" : "Upload Resume"}
+        </button>
       </div>
+
+      {/* ── Resume upload panel ── */}
+      {showUpload && (
+        <div className="mb-6 max-w-lg">
+          <ResumeUpload compact onSuccess={() => setShowUpload(false)} />
+        </div>
+      )}
 
       {/* ── Radar scatter view ── */}
       <RadarView
