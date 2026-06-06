@@ -240,7 +240,7 @@ interface RadarViewProps {
 }
 
 export default function RadarView({ jobs, totalJobs, isLoading, onSelectJob }: RadarViewProps) {
-  const { filters, setFilters, selectedJobId } = useAppStore();
+  const { filters, setFilters, selectedJobId, isFetchingJobs } = useAppStore();
   const [hoveredJob, setHoveredJob] = useState<Job | null>(null);
   const [autoZoom, setAutoZoom] = useState(false);
   const [localSearch, setLocalSearch] = useState(filters.search ?? "");
@@ -307,12 +307,19 @@ export default function RadarView({ jobs, totalJobs, isLoading, onSelectJob }: R
           </div>
         ) : plotData.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-2xl border border-white/[0.06] bg-signal-surface/40 text-center">
-            <div>
-              <Target className="mx-auto mb-3 h-10 w-10 text-gray-700" />
-              <p className="text-sm text-gray-500">
-                {autoZoom ? "No jobs with score > 60 — try turning off Auto-zoom" : "No jobs on radar yet — fetch jobs to begin"}
-              </p>
-            </div>
+            {isFetchingJobs ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-10 w-10 rounded-full border-2 border-signal-cyan/30 border-t-signal-cyan animate-spin" />
+                <p className="text-sm text-gray-400">Fetching jobs — this may take a minute…</p>
+              </div>
+            ) : (
+              <div>
+                <Target className="mx-auto mb-3 h-10 w-10 text-gray-700" />
+                <p className="text-sm text-gray-500">
+                  {autoZoom ? "No jobs with score > 60 — try turning off Auto-zoom" : "No jobs on radar yet — fetch jobs to begin"}
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex-1 rounded-2xl border border-white/[0.06] bg-signal-surface/40 p-4 relative">
