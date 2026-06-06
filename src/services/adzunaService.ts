@@ -96,7 +96,8 @@ function buildSearchQuery(profile: ParsedProfile): string {
 
   const techSkills = profile.skills.filter(isTechSkill).slice(0, 5);
   parts.push(...techSkills);
-  return parts.slice(0, 3).join(" ");
+  const query = parts.slice(0, 3).join(" ").trim();
+  return query || "software engineer";
 }
 
 function isTechSkill(skill: string): boolean {
