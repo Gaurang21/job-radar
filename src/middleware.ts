@@ -9,10 +9,20 @@ const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // If Supabase isn't configured, don't crash the whole site. Let the request
+  // through — protected pages still enforce auth via requireUser() server-side.
+  if (!supabaseUrl || !supabaseKey) {
+    console.error(
+      "[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — skipping auth check."
+    );
+    return response;
+  }
+
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (toSet) => {
@@ -23,29 +33,34 @@ export async function middleware(request: NextRequest) {
           );
         },
       },
+    });
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const path = request.nextUrl.pathname;
+
+    const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
+    const isAuthPage = AUTH_PAGES.some((p) => path === p);
+
+    if (isProtected && !user) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("next", path);
+      return NextResponse.redirect(redirectUrl);
     }
-  );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const path = request.nextUrl.pathname;
+    if (isAuthPage && user) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/dashboard";
+      return NextResponse.redirect(redirectUrl);
+    }
 
-  const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
-  const isAuthPage = AUTH_PAGES.some((p) => path === p);
-
-  if (isProtected && !user) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("next", path);
-    return NextResponse.redirect(redirectUrl);
+    return response;
+  } catch (err) {
+    // Never let a transient Supabase/network error turn into a site-wide 500.
+    // Server-side requireUser() remains the source of truth for protected routes.
+    console.error("[middleware] Auth check failed:", err);
+    return response;
   }
-
-  if (isAuthPage && user) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  return response;
 }
 
 export const config = {
