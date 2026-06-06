@@ -62,13 +62,14 @@ export default function Navbar({ user, profile }: Props) {
       const res = await fetch("/api/jobs/fetch", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Found ${data.jobsFound} jobs, ${data.scored ?? 0} scored`, { id: toastId });
+        toast.success(`Found ${data.jobsFound} jobs, ${data.scored ?? 0} scored`, { id: toastId, duration: 5000 });
         window.dispatchEvent(new CustomEvent("jobs-refreshed"));
       } else {
-        toast.error(data.error || "Failed to fetch jobs", { id: toastId });
+        const detail = data.details?.map((e: { service: string; message: string }) => `${e.service}: ${e.message}`).join(" | ");
+        toast.error(detail || data.error || "Failed to fetch jobs", { id: toastId, duration: 8000 });
       }
-    } catch {
-      toast.error("Failed to connect", { id: toastId });
+    } catch (err) {
+      toast.error(`Failed to connect: ${err instanceof Error ? err.message : "unknown"}`, { id: toastId, duration: 8000 });
     } finally {
       setIsFetchingJobs(false);
     }
