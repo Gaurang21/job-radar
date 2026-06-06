@@ -12,7 +12,7 @@ export async function resolveAIContext(
     .eq("user_id", userId)
     .maybeSingle();
 
-  let provider: AIProvider = settings?.ai_provider ?? "anthropic";
+  let provider: AIProvider = settings?.ai_provider ?? (process.env.GROQ_API_KEY ? "groq" : "anthropic");
   let apiKey: string | null = null;
 
   if (provider === "groq") {
