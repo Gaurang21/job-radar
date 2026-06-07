@@ -35,7 +35,7 @@ export async function fetchAdzunaJobs(
         full_description: "1",
       });
 
-      if (profile.location) params.append("where", profile.location);
+      if (profile.location) params.append("where", sanitizeLocation(profile.location));
 
       const response = await fetch(`${BASE_URL}/search/${page}?${params.toString()}`, {
         headers: { "User-Agent": "JobRadar/1.0" },
@@ -109,4 +109,11 @@ function isTechSkill(skill: string): boolean {
     "golang", "rust", "c++", "swift", "kotlin", "ruby", "rails", "django",
   ];
   return techKeywords.some((kw) => skill.toLowerCase().includes(kw));
+}
+
+function sanitizeLocation(location: string): string {
+  // Adzuna expects a city or region name, not a full address.
+  // Take the first comma-separated segment and strip zip codes / country.
+  const city = location.split(",")[0].trim().replace(/\d{5}(-\d{4})?$/, "").trim();
+  return city || location;
 }

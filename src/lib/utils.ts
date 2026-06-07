@@ -110,7 +110,9 @@ export function truncate(str: string, maxLength: number): string {
 }
 
 export function generateExternalId(source: string, title: string, company: string, url: string): string {
-  const base = `${source}:${title}:${company}:${url}`;
+  // Use URL as the canonical key when available — title can vary between fetches
+  const key = url.trim() ? url.trim() : `${title}:${company}`;
+  const base = `${source}:${key}`;
   let hash = 0;
   for (let i = 0; i < base.length; i++) {
     const char = base.charCodeAt(i);

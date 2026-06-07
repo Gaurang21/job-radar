@@ -60,6 +60,13 @@ export async function POST() {
       }, { status: 503 });
     }
 
+    // ── Remove stale "Unknown" title jobs so upsert can replace them cleanly ──
+    await supabase
+      .from("jobs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("title", "Unknown");
+
     // ── Upsert jobs ──
     let newCount = 0;
     const insertedIds: string[] = [];
