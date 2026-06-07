@@ -122,9 +122,11 @@ export function generateExternalId(source: string, title: string, company: strin
 
 // ─── Job Normalizers ──────────────────────────────────────────
 
-export function normalizeJobType(raw?: string | null): string | null {
+export function normalizeJobType(raw?: string | string[] | null): string | null {
   if (!raw) return null;
-  const lower = raw.toLowerCase();
+  const str = Array.isArray(raw) ? raw[0] : raw;
+  if (!str || typeof str !== "string") return null;
+  const lower = str.toLowerCase();
   if (lower.includes("remote")) return "remote";
   if (lower.includes("contract") || lower.includes("freelance")) return "contract";
   if (lower.includes("part")) return "part-time";
