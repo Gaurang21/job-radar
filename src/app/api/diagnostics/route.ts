@@ -77,7 +77,6 @@ async function probeAdzuna() {
     app_key: appKey,
     results_per_page: "1",
     what: "software engineer",
-    content_type: "application/json",
   });
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params.toString()}`;
 

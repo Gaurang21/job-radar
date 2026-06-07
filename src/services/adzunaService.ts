@@ -31,15 +31,13 @@ export async function fetchAdzunaJobs(
         app_id: APP_ID,
         app_key: APP_KEY,
         results_per_page: "10",
-        page: String(page),
         what: searchTerms,
-        content_type: "application/json",
         full_description: "1",
       });
 
       if (profile.location) params.append("where", profile.location);
 
-      const response = await fetch(`${BASE_URL}/search/1?${params.toString()}`, {
+      const response = await fetch(`${BASE_URL}/search/${page}?${params.toString()}`, {
         headers: { "User-Agent": "JobRadar/1.0" },
         signal: AbortSignal.timeout(15000),
       });
