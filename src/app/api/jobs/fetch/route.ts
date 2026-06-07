@@ -52,7 +52,12 @@ export async function POST() {
     }
 
     if (allJobs.length === 0) {
-      return NextResponse.json({ success: false, error: "No jobs fetched", details: errors }, { status: 503 });
+      const missing = errors.map((e) => e.service).join(", ");
+      return NextResponse.json({
+        success: false,
+        error: `No jobs fetched. Configure at least one job source (${missing || "Adzuna or Apify"}).`,
+        details: errors,
+      }, { status: 503 });
     }
 
     // ── Upsert jobs ──

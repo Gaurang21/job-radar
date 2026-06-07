@@ -49,7 +49,10 @@ export async function fetchAdzunaJobs(
         if (response.status === 429) {
           return { jobs: allJobs, error: "Adzuna daily limit (250 req) reached. Resets at midnight.", count: allJobs.length };
         }
-        throw new Error(`Adzuna API error: ${response.status}`);
+        const body = await response.text().catch(() => "");
+        // Adzuna returns HTML for some 400s — strip tags for a readable message
+        const detail = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+        throw new Error(`Adzuna API error: ${response.status}${detail ? ` — ${detail}` : ""}`);
       }
 
       const data = await response.json();

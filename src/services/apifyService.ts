@@ -27,7 +27,9 @@ async function runApifyActor(actorId: string, input: Record<string, unknown>): P
   );
 
   if (!runResp.ok) {
-    if (runResp.status === 401 || runResp.status === 403) throw new Error("Apify token invalid");
+    if (runResp.status === 401) throw new Error("Apify token invalid or expired");
+    if (runResp.status === 403) throw new Error("Apify actor requires a paid subscription — skipping");
+    if (runResp.status === 404) throw new Error("Apify actor not found — actor ID may have changed");
     const body = await runResp.text();
     if (body.includes("credit") || body.includes("quota")) throw new Error("Apify credits exhausted");
     throw new Error(`Apify actor start failed: ${runResp.status}`);
