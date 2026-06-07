@@ -272,13 +272,20 @@ export interface AdzunaJob {
 
 export interface ApifyLinkedInJob {
   id?: string;
+  // actor may return title under different keys
   title?: string;
+  jobTitle?: string;
+  position?: string;
   companyName?: string;
+  company?: string;
   location?: string;
   description?: string;
   url?: string;
+  applyUrl?: string;
   postedDate?: string;
+  publishedAt?: string;
   employmentType?: string;
+  contractType?: string;
   seniorityLevel?: string;
   salary?: string;
   companySize?: string;
@@ -287,13 +294,17 @@ export interface ApifyLinkedInJob {
 
 export interface ApifyIndeedJob {
   id?: string;
+  // misceres/indeed-scraper uses positionName
+  positionName?: string;
   title?: string;
   company?: string;
   location?: string;
   description?: string;
   url?: string;
+  externalApplyLink?: string;
   date?: string;
-  jobType?: string;
+  postedAt?: string;
+  jobType?: string | string[];
   salary?: string;
 }
 

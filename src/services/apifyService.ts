@@ -71,24 +71,33 @@ export async function fetchLinkedInJobs(profile: ParsedProfile): Promise<ApifyFe
       limit: 25,
     })) as ApifyLinkedInJob[];
 
-    const jobs: ProcessedJob[] = rawJobs.map((job) => ({
-      external_id: generateExternalId("linkedin", job.title ?? "", job.companyName ?? "", job.url ?? ""),
-      title: job.title ?? "Unknown",
-      company: job.companyName ?? "Unknown",
-      location: job.location ?? null,
-      salary_min: parseSalaryMin(job.salary),
-      salary_max: parseSalaryMax(job.salary),
-      salary_currency: "USD",
-      job_type: normalizeJobType(job.employmentType),
-      seniority: normalizeSeniority(job.title ?? "", job.seniorityLevel),
-      description: job.description ?? "",
-      application_url: job.url ?? "",
-      source: "linkedin",
-      posted_date: job.postedDate ?? null,
-      hiring_manager: null,
-      company_size: job.companySize ?? null,
-      company_industry: job.industry ?? null,
-    }));
+    if (rawJobs.length > 0) {
+      console.log("[apify/linkedin] first job keys:", Object.keys(rawJobs[0]));
+    }
+
+    const jobs: ProcessedJob[] = rawJobs.map((job) => {
+      const title = job.title ?? job.jobTitle ?? job.position ?? "";
+      const company = job.companyName ?? job.company ?? "";
+      const url = job.url ?? job.applyUrl ?? "";
+      return {
+        external_id: generateExternalId("linkedin", title, company, url),
+        title: title || "Unknown",
+        company: company || "Unknown",
+        location: job.location ?? null,
+        salary_min: parseSalaryMin(job.salary),
+        salary_max: parseSalaryMax(job.salary),
+        salary_currency: "USD",
+        job_type: normalizeJobType(job.employmentType ?? job.contractType),
+        seniority: normalizeSeniority(title, job.seniorityLevel),
+        description: job.description ?? "",
+        application_url: url,
+        source: "linkedin",
+        posted_date: job.postedDate ?? job.publishedAt ?? null,
+        hiring_manager: null,
+        company_size: job.companySize ?? null,
+        company_industry: job.industry ?? null,
+      };
+    });
 
     return { jobs, source: "linkedin" };
   } catch (err) {
@@ -108,21 +117,30 @@ export async function fetchIndeedJobs(profile: ParsedProfile): Promise<ApifyFetc
       parseCompanyDetails: false,
     })) as ApifyIndeedJob[];
 
-    const jobs: ProcessedJob[] = rawJobs.map((job) => ({
-      external_id: generateExternalId("indeed", job.title ?? "", job.company ?? "", job.url ?? ""),
-      title: job.title ?? "Unknown",
-      company: job.company ?? "Unknown",
-      location: job.location ?? null,
-      salary_min: parseSalaryMin(job.salary),
-      salary_max: parseSalaryMax(job.salary),
-      salary_currency: "USD",
-      job_type: normalizeJobType(job.jobType),
-      seniority: normalizeSeniority(job.title ?? ""),
-      description: job.description ?? "",
-      application_url: job.url ?? "",
-      source: "indeed",
-      posted_date: job.date ?? null,
-    }));
+    if (rawJobs.length > 0) {
+      console.log("[apify/indeed] first job keys:", Object.keys(rawJobs[0]));
+    }
+
+    const jobs: ProcessedJob[] = rawJobs.map((job) => {
+      // misceres/indeed-scraper uses positionName; fall back to title for other actors
+      const title = job.positionName ?? job.title ?? "";
+      const url = job.url ?? job.externalApplyLink ?? "";
+      return {
+        external_id: generateExternalId("indeed", title, job.company ?? "", url),
+        title: title || "Unknown",
+        company: job.company || "Unknown",
+        location: job.location ?? null,
+        salary_min: parseSalaryMin(job.salary),
+        salary_max: parseSalaryMax(job.salary),
+        salary_currency: "USD",
+        job_type: normalizeJobType(job.jobType),
+        seniority: normalizeSeniority(title),
+        description: job.description ?? "",
+        application_url: url,
+        source: "indeed",
+        posted_date: job.date ?? job.postedAt ?? null,
+      };
+    });
 
     return { jobs, source: "indeed" };
   } catch (err) {
