@@ -2,11 +2,12 @@
 import { useState } from "react";
 import {
   MapPin, Building2, Clock, DollarSign, Bookmark, ExternalLink,
-  Zap, AlertTriangle,
+  Zap, AlertTriangle, Sparkles,
 } from "lucide-react";
 import { cn, formatSalary, formatRelativeDate, isClosingSoon } from "@/lib/utils";
 import { ScoreBadge } from "@/components/ui/Badge";
 import Badge from "@/components/ui/Badge";
+import WhyMatchPanel from "@/components/jobs/WhyMatchPanel";
 import type { Job } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
 import toast from "react-hot-toast";
@@ -34,6 +35,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export default function JobCard({ job, onClick, onCoverLetter, index = 0 }: Props) {
   const [isSaving, setIsSaving] = useState(false);
+  const [showWhyMatch, setShowWhyMatch] = useState(false);
   const { updateJob } = useAppStore();
   const closing = isClosingSoon(job.closing_date);
 
@@ -133,6 +135,15 @@ export default function JobCard({ job, onClick, onCoverLetter, index = 0 }: Prop
             className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.08] transition-all">
             <Zap className="h-3 w-3" /> Cover Letter
           </button>
+          <button onClick={(e) => { e.stopPropagation(); setShowWhyMatch((v) => !v); }}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+              showWhyMatch
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                : "bg-white/[0.04] border-white/[0.08] text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+            )}>
+            <Sparkles className="h-3 w-3" /> Why match
+          </button>
         </div>
         <button onClick={handleSave} disabled={isSaving}
           className={cn("rounded-lg p-1.5 transition-all",
@@ -141,6 +152,9 @@ export default function JobCard({ job, onClick, onCoverLetter, index = 0 }: Prop
           <Bookmark className={cn("h-4 w-4", job.saved && "fill-signal-cyan")} />
         </button>
       </div>
+
+      {/* Streaming match explanation — unmount aborts the stream */}
+      {showWhyMatch && <WhyMatchPanel jobId={job.id} />}
     </div>
   );
 }
