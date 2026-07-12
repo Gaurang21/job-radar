@@ -133,3 +133,38 @@ describe("testConnection", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("streamMatchExplanation (stub)", () => {
+  it("emits step frames, deltas, then a terminal done frame with a valid score", async () => {
+    const { streamMatchExplanation, MATCH_STREAM_STEPS } = await getService();
+    const frames = [];
+    for await (const frame of streamMatchExplanation(stubCtx, stubJob, stubProfile)) {
+      frames.push(frame);
+    }
+
+    const steps = frames.filter((f) => f.type === "step");
+    const deltas = frames.filter((f) => f.type === "delta");
+    const done = frames.filter((f) => f.type === "done");
+
+    expect(steps.map((s) => s.step)).toEqual(MATCH_STREAM_STEPS.map((s) => s.id));
+    expect(deltas.length).toBeGreaterThan(0);
+    expect(done).toHaveLength(1);
+    expect(frames[frames.length - 1].type).toBe("done");
+    if (done[0].type === "done") {
+      expect(done[0].score).toBeGreaterThanOrEqual(0);
+      expect(done[0].score).toBeLessThanOrEqual(100);
+      expect(done[0].latencyMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("streams the full explanation text through delta frames", async () => {
+    const { streamMatchExplanation } = await getService();
+    let text = "";
+    for await (const frame of streamMatchExplanation(stubCtx, stubJob, stubProfile)) {
+      if (frame.type === "delta") text += frame.text;
+    }
+    // Stub sections mention the matched skills and the company
+    expect(text).toContain("Acme Corp");
+    expect(text.length).toBeGreaterThan(100);
+  });
+});

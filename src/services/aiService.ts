@@ -33,7 +33,7 @@ interface ServiceContext {
   settings?: Partial<AISettings>;
 }
 
-// ─── Clients ──────────────────────────────────────────────────
+// ─── Clients ────────────────────────────────────────────────
 
 function buildAnthropicClient(apiKey?: string | null): Anthropic | null {
   const key = apiKey || process.env.ANTHROPIC_API_KEY;
@@ -227,8 +227,11 @@ interface StreamJobInput {
 
 /**
  * Streams a match explanation as typed frames: step → deltas → done.
- * Falls back to a canned stub stream when AI is unavailable or the
- * why_match feature flag is off (graceful degradation, never throws).
+ * The model writes four marked sections (@@skills, @@seniority,
+ * @@location, @@verdict) and a final SCORE line; markers become step
+ * frames, the score is captured for the done frame, and everything
+ * else streams through as deltas. Falls back to a canned stub stream
+ * when AI is unavailable or the why_match flag is off (never throws).
  */
 export async function* streamMatchExplanation(
   ctx: ServiceContext,
@@ -236,9 +239,158 @@ export async function* streamMatchExplanation(
   profile: ParsedProfile
 ): AsyncGenerator<MatchStreamFrame> {
   const startedAt = Date.now();
-  // Real provider streaming wired in a follow-up commit — stub streams
-  // canned deltas so the feature works end-to-end without an API key.
-  yield* streamStubMatch(job, profile, startedAt);
+
+  if (STUB_MODE || ctx.settings?.why_match_enabled === false) {
+    yield* streamStubMatch(job, profile, startedAt);
+    return;
+  }
+
+  const provider = ctx.provider ?? "anthropic";
+  const prompt = buildMatchStreamPrompt(job, profile);
+
+  try {
+    let textStream: AsyncGenerator<string> | null = null;
+    if (provider === "groq") {
+      const client = buildGroqClient(ctx.apiKey);
+      if (client) textStream = groqTextStream(client, prompt);
+    } else {
+      const client = buildAnthropicClient(ctx.apiKey);
+      if (client) textStream = anthropicTextStream(client, prompt);
+    }
+
+    if (!textStream) {
+      // No API key configured — degrade to the canned stream
+      yield* streamStubMatch(job, profile, startedAt);
+      return;
+    }
+
+    yield* parseMarkedStream(textStream, heuristicMatchScore(job, profile), startedAt);
+  } catch (err) {
+    console.error("Match stream error:", err);
+    yield { type: "error", message: "AI analysis failed — please try again." };
+  }
+}
+
+function buildMatchStreamPrompt(job: StreamJobInput, profile: ParsedProfile): string {
+  return `You are an expert career-match analyst. Explain to the candidate (in second person, "you") why this job does or doesn't match them.
+
+Write EXACTLY four sections. Start each section with its marker ALONE on its own line, then 2-3 concise sentences:
+@@skills
+(compare the candidate's skills to what the job needs)
+@@seniority
+(assess experience-level fit)
+@@location
+(weigh location and remote compatibility)
+@@verdict
+(overall verdict: should they apply, and what to emphasise if so)
+
+After the verdict section, output one final line in exactly this form:
+SCORE: <integer 0-100>
+
+CANDIDATE:
+${profileSummary(profile)}
+
+JOB:
+Title: ${job.title}
+Company: ${job.company}
+${job.location ? `Location: ${job.location}` : ""}
+${job.seniority ? `Level: ${job.seniority}` : ""}
+Description: ${job.description.slice(0, 1800)}`;
+}
+
+async function* anthropicTextStream(client: Anthropic, prompt: string): AsyncGenerator<string> {
+  const stream = client.messages.stream({
+    model: ANTHROPIC_DEFAULT,
+    max_tokens: 700,
+    messages: [{ role: "user", content: prompt }],
+  });
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      yield event.delta.text;
+    }
+  }
+}
+
+async function* groqTextStream(client: Groq, prompt: string): AsyncGenerator<string> {
+  const stream = await client.chat.completions.create({
+    model: GROQ_DEFAULT,
+    max_tokens: 700,
+    stream: true,
+    messages: [{ role: "user", content: prompt }],
+  });
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
+  }
+}
+
+const MARKER_TO_STEP: Record<string, { id: MatchStreamStepId; label: string }> = Object.fromEntries(
+  MATCH_STREAM_STEPS.map((s) => [`@@${s.id}`, s])
+);
+const CONTROL_PREFIXES = [...Object.keys(MARKER_TO_STEP), "SCORE:"];
+
+/** A partial line that could still grow into a marker or SCORE line must be held. */
+function mightBeControlLine(partial: string): boolean {
+  const t = partial.trimStart().toUpperCase();
+  return CONTROL_PREFIXES.some((p) => p.toUpperCase().startsWith(t) || t.startsWith(p.toUpperCase()));
+}
+
+function classifyLine(
+  raw: string,
+  terminal: boolean
+): { frame: MatchStreamFrame | null; score: number | null } {
+  const trimmed = raw.trim();
+  const step = MARKER_TO_STEP[trimmed];
+  if (step) return { frame: { type: "step", step: step.id, label: step.label }, score: null };
+  const scoreMatch = trimmed.match(/^SCORE:\s*(\d{1,3})\b/i);
+  if (scoreMatch) return { frame: null, score: Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) };
+  if (terminal && !trimmed) return { frame: null, score: null };
+  return { frame: { type: "delta", text: terminal ? raw : raw + "\n" }, score: null };
+}
+
+/**
+ * Line-aware transform: swallows @@marker lines (→ step frames) and the
+ * SCORE line (→ done frame), forwards everything else as deltas. Partial
+ * lines stream through immediately unless they could still become a
+ * control line, so normal prose keeps its token-by-token feel.
+ */
+async function* parseMarkedStream(
+  chunks: AsyncIterable<string>,
+  fallbackScore: number,
+  startedAt: number
+): AsyncGenerator<MatchStreamFrame> {
+  let line = "";
+  let score: number | null = null;
+
+  for await (const chunk of chunks) {
+    let rest = chunk;
+    for (;;) {
+      const nl = rest.indexOf("\n");
+      if (nl === -1) {
+        line += rest;
+        break;
+      }
+      line += rest.slice(0, nl);
+      rest = rest.slice(nl + 1);
+      const { frame, score: s } = classifyLine(line, false);
+      if (s != null) score = s;
+      if (frame) yield frame;
+      line = "";
+    }
+    if (line && !mightBeControlLine(line)) {
+      yield { type: "delta", text: line };
+      line = "";
+    }
+  }
+
+  // Flush the final partial line (often the SCORE line without a trailing \n)
+  if (line) {
+    const { frame, score: s } = classifyLine(line, true);
+    if (s != null) score = s;
+    if (frame) yield frame;
+  }
+
+  yield { type: "done", score: score ?? fallbackScore, latencyMs: Date.now() - startedAt };
 }
 
 function sleep(ms: number) {
