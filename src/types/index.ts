@@ -185,6 +185,17 @@ export interface MatchResult {
   whyMatch: string;
 }
 
+// ─── Streaming "Why this matches" (SSE frames) ────────────────
+
+export type MatchStreamStepId = "skills" | "seniority" | "location" | "verdict";
+
+/** Discriminated union of SSE frames emitted by /api/ai/why-match-stream. */
+export type MatchStreamFrame =
+  | { type: "step"; step: MatchStreamStepId; label: string }
+  | { type: "delta"; text: string }
+  | { type: "done"; score: number; latencyMs: number }
+  | { type: "error"; message: string };
+
 export interface InterviewPrepResult {
   questions: InterviewQuestion[];
 }

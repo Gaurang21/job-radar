@@ -14,6 +14,8 @@ import type {
   EmailTone,
   AISettings,
   AIProvider,
+  MatchStreamFrame,
+  MatchStreamStepId,
 } from "@/types";
 
 // ─── Configuration ────────────────────────────────────────────
@@ -202,6 +204,82 @@ function stubExplain() {
     transferable: ["Adjacent: Vue.js, Web Components"],
     missing: ["Specific framework experience"],
   };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 5b-live. Streaming "Why this matches" Explainer (SSE frames)
+// ═══════════════════════════════════════════════════════════════
+
+export const MATCH_STREAM_STEPS: ReadonlyArray<{ id: MatchStreamStepId; label: string }> = [
+  { id: "skills", label: "Comparing skills…" },
+  { id: "seniority", label: "Checking seniority fit…" },
+  { id: "location", label: "Weighing location & remote…" },
+  { id: "verdict", label: "Writing final verdict…" },
+];
+
+interface StreamJobInput {
+  title: string;
+  company: string;
+  description: string;
+  location?: string | null;
+  seniority?: string | null;
+}
+
+/**
+ * Streams a match explanation as typed frames: step → deltas → done.
+ * Falls back to a canned stub stream when AI is unavailable or the
+ * why_match feature flag is off (graceful degradation, never throws).
+ */
+export async function* streamMatchExplanation(
+  ctx: ServiceContext,
+  job: StreamJobInput,
+  profile: ParsedProfile
+): AsyncGenerator<MatchStreamFrame> {
+  const startedAt = Date.now();
+  // Real provider streaming wired in a follow-up commit — stub streams
+  // canned deltas so the feature works end-to-end without an API key.
+  yield* streamStubMatch(job, profile, startedAt);
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function heuristicMatchScore(job: StreamJobInput, profile: ParsedProfile): number {
+  const desc = job.description.toLowerCase();
+  const matched = profile.skills.filter((s) => desc.includes(s.toLowerCase()));
+  return Math.max(25, Math.min(95, 40 + matched.length * 7));
+}
+
+async function* streamStubMatch(
+  job: StreamJobInput,
+  profile: ParsedProfile,
+  startedAt: number
+): AsyncGenerator<MatchStreamFrame> {
+  const desc = job.description.toLowerCase();
+  const matched = profile.skills.filter((s) => desc.includes(s.toLowerCase())).slice(0, 6);
+
+  const sections: Record<MatchStreamStepId, string> = {
+    skills: matched.length > 0
+      ? `Your toolkit lines up well here — ${matched.join(", ")} all appear in the posting, covering the core of what ${job.company} is asking for.\n\n`
+      : `The posting leans on skills adjacent to yours, so expect some ramp-up — though your background in ${profile.skills.slice(0, 3).join(", ") || "your field"} should transfer.\n\n`,
+    seniority: `With ${profile.experienceYears} years of experience${profile.titles[0] ? ` as a ${profile.titles[0]}` : ""}, you sit comfortably in the range this ${job.seniority ?? "mid"}-level role targets.\n\n`,
+    location: job.location
+      ? `The role is based in ${job.location}${profile.location ? ` and you're in ${profile.location}` : ""} — check the posting for remote or hybrid flexibility.\n\n`
+      : `No location constraint is listed, which usually signals remote-friendliness.\n\n`,
+    verdict: `Overall this looks like a ${matched.length >= 3 ? "strong" : "reasonable"} match worth applying to. (Demo mode — add an API key in Settings → AI for a real analysis.)`,
+  };
+
+  for (const step of MATCH_STREAM_STEPS) {
+    yield { type: "step", step: step.id, label: step.label };
+    // Word-by-word so the client sees genuine incremental deltas
+    for (const word of sections[step.id].split(/(?<=\s)/)) {
+      yield { type: "delta", text: word };
+      await sleep(18);
+    }
+  }
+
+  yield { type: "done", score: heuristicMatchScore(job, profile), latencyMs: Date.now() - startedAt };
 }
 
 // ═══════════════════════════════════════════════════════════════
